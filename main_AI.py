@@ -14,16 +14,15 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtWidgets import QGridLayout  # Добавьте в импорт
 from PyQt5.QtCore import Qt, QDate, QSize, pyqtSignal, QThread
-from PyQt5.QtGui import QFont, QColor, QIntValidator
+from PyQt5.QtGui import QFont, QColor, QIntValidator, QDrag
 from PyQt5.QtCore import QTimer, QTime
-from PyQt5.QtWidgets import QCompleter,  QSpinBox
+from PyQt5.QtWidgets import QCompleter
 from PyQt5.QtCore import QStringListModel
 from PyQt5.QtWidgets import QStackedWidget, QTableWidget, QTableWidgetItem, QTimeEdit
 from PyQt5.QtCore import QMimeData, QEvent, QSettings
-from PyQt5.QtGui import QDrag
+
 
 from datetime import date, datetime, time as dtime, timedelta
-
 
 from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from reportlab.lib import colors
@@ -33,7 +32,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm, cm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-# from reportlab.lib.colors import *
 from reportlab.lib.styles import ParagraphStyle as PS
 from typing import List, Tuple, Dict, Optional, Set
 from reportlab.pdfgen.canvas import Canvas
@@ -41,27 +39,19 @@ from reportlab.lib.colors import Color, black, blue
 import tempfile
 import pymysql
 
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                             QDateEdit, QTimeEdit, QSpinBox, QDialogButtonBox)
-from PyQt5.QtCore import QDate, QTime
-
-
-
 from models import connect_db, close_db
-# from models import *
 from models_qt import (
     PlayersTableModel, TeamsTableModel, ResultsTableModel, DoublesResultsTableModel,
     DoublePlayersTableModel, TitlesTableModel, CoachesTableModel, RatingTableModel
 )
-from models import (Referee, GskMember, Title, Team, Players_double, Player,
+from models import (Referee, GskMember, Title, Team, Players_double, Player, Referee,
                      Coach, Result, Patronymic, Region, R1_list_d, R1_list_m,
                        R_list_d, R_list_m, Choice, System, City, Players_full,
                          Game_list, Delete_player, Choice_Team, Choice_double_player, db)
-# from peewee import JOIN
-import datetime
-from PyQt5.QtWidgets import QMessageBox
 
-# from datetime import *
+# import datetime
+from datetime import date, datetime, time as dtime, timedelta
+
 import pandas as pd
 import math
 import re
@@ -73,14 +63,14 @@ import subprocess
 import openpyxl as op
 
 from collections import defaultdict
-from datetime import datetime
+
 from PyPDF2 import PdfMerger 
 
 # В основной программе
 import auto_choice_group
 import manual_choice
 import db_setup
-# ManualNetDrawDialog
+
 
 from db_setup import setup_database
 from import_initial_data import InitialDataImportDialog
@@ -91,22 +81,20 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        settings = QSettings("MyOrg", "TT_Competitions")
-        is_first_run = settings.value("first_run", True, type=bool)
+        # settings = QSettings("MyOrg", "TT_Competitions")
+        # is_first_run = settings.value("first_run", True, type=bool)
 
-        if not is_first_run:
-            # self.check_rating_relevance()
-            self.check_rating_actual
-        else:
-            settings.setValue("first_run", False)
-            db_setup.offer_initial_import()
-        # # Проверка актуальности рейтинга через 1.5 секунды после запуска
-        # QTimer.singleShot(1500, self.check_rating_actual)
+        # if not is_first_run:
+        #     # self.check_rating_relevance()
+        #     self.check_rating_actual
+        # else:
+        #     settings.setValue("first_run", False)
+        #     db_setup.offer_initial_import()
+        # Проверка актуальности рейтинга через 1.5 секунды после запуска
+        QTimer.singleShot(1500, self.check_rating_actual)
 
         # Проверка старых бэкапов при запуске (через 5 секунды после загрузки)
         QTimer.singleShot(2000, self.check_old_backups_on_startup)
-
-
 
         self.setWindowTitle("Панель управления соревнованиями")
         self.setGeometry(100, 100, 1500, 780)
@@ -139,7 +127,7 @@ class MainWindow(QMainWindow):
         
         # Данные для comboBox
         self.load_combo_data()
-        self.load_referees_list()
+        # self.load_referees_list()
         
         self.tab_context = {
             0: {"title": "Титул", "description": "Управление информацией о соревновании",
@@ -224,17 +212,20 @@ class MainWindow(QMainWindow):
 # =========================
     def check_old_backups_on_startup(self):
         """Проверка старых бэкапов при запуске"""
+        # from datetime import datetime
         backup_dir = "backup_db"
         if not os.path.exists(backup_dir):
             return
         
         days = 3
-        now = datetime.datetime.now()
+        # now = datetime.datetime.now()
+        now = datetime.now()
         old_files = []
         for filename in os.listdir(backup_dir):
             filepath = os.path.join(backup_dir, filename)
             if os.path.isfile(filepath) and filename.endswith(('.sql', '.zip')):
-                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+                # mtime = datetime.datetime.fromtimestamp(os.path.getmtime(filepath))
+                mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
                 if (now - mtime).days >= days:
                     old_files.append(filepath)
         
@@ -410,21 +401,21 @@ class MainWindow(QMainWindow):
         self.patronymics_list = [(p.id, p.patronymic, p.sex) for p in Patronymic.select().order_by(Patronymic.patronymic)]
         self.regions_list = [(r.id, r.region) for r in Region.select().order_by(Region.region)]
     
-    def load_referees_list(self):
-        """Загрузка списка судей из БД"""
-        try:
-            from models import Referee
-            referees = Referee.select().order_by(Referee.family)
-            self.referees_list = [(r.id, r.family, r.category) for r in referees]
-        except:
-            # Тестовые данные
-            self.referees_list = [
-                (1, "Иванов И.И.", "ВК"),
-                (2, "Петров П.П.", "1К"),
-                (3, "Сидоров С.С.", "2К"),
-                (4, "Кузнецова А.А.", "1К"),
-                (5, "Смирнова Е.В.", "ВК"),
-            ]
+    # def load_referees_list(self):
+    #     """Загрузка списка судей из БД"""
+    #     try:
+    #         from models import Referee
+    #         referees = Referee.select().order_by(Referee.family)
+    #         self.referees_list = [(r.id, r.family, r.category) for r in referees]
+    #     except:
+    #         # Тестовые данные
+    #         self.referees_list = [
+    #             (1, "Иванов И.И.", "ВК"),
+    #             (2, "Петров П.П.", "1К"),
+    #             (3, "Сидоров С.С.", "2К"),
+    #             (4, "Кузнецова А.А.", "1К"),
+    #             (5, "Смирнова Е.В.", "ВК"),
+    #         ]
     
     def load_titles_list(self):
         """Загрузка списка соревнований в QListWidget"""
@@ -1335,7 +1326,7 @@ class MainWindow(QMainWindow):
     def check_rating_actual(self):
         """Проверяет актуальность рейтинга только для активных соревнований"""
         try:
-            from datetime import date
+            # from datetime import date
             today = date.today()
             current_month = today.strftime("%Y_%m")  # например, "2025_10"
             
@@ -1682,19 +1673,17 @@ class MainWindow(QMainWindow):
 
     def on_referee_text_changed(self, text):
         """Поиск судьи в БД при вводе текста"""
-        if len(text) >= 3:  # Начинаем поиск после 3 символов
+        if len(text) >= 2:  # Начинаем поиск после 3 символов
             self.find_referee_in_db(text, self.referee_category_combo)
 
     def on_secretary_text_changed(self, text):
         """Поиск секретаря в БД при вводе текста"""
-        if len(text) >= 3:
+        if len(text) >= 2:
             self.find_referee_in_db(text, self.secretary_category_combo)
 
     def find_referee_in_db(self, search_text, category_combo):
         """Поиск судьи в базе данных"""
-        try:
-            from models import Referee
-            
+        try:          
             # Ищем судью по фамилии (частичное совпадение)
             referees = Referee.select().where(Referee.family.contains(search_text))
             
@@ -9480,79 +9469,131 @@ class MainWindow(QMainWindow):
         
         # Открываем диалог выбора файлов рейтинга
         dialog = RatingFileDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            # Получаем дату из загруженных файлов
-            rating_date = QDate.currentDate()
-            rating_date_str = rating_date.toString("yyyy_MM")
-            
-            # Проверяем на актуальность
-            if not self.check_existing_rating(rating_date_str):
-                return
-            
-               # Создаем запись в таблице Title с временными значениями
-            current_date = QDate.currentDate().toPyDate()
-            rating_date_str = QDate.currentDate().toString("yyyy_MM")
-            
-            # Временные значения для short_name и full_name
-            temp_short_name = "Новое"
-            temp_full_name = f"Новое соревнование.{rating_date_str}.не указано"
-            
-            title_data = {
-                'name': "",
-                'short_name_comp': temp_short_name,
-                'full_name_comp': temp_full_name,
-                'sredi': "",
-                'vozrast': "",
-                'data_start': current_date,
-                'data_end': current_date,
-                'mesto': "",
-                'city': "",
-                'referee': "",
-                'kat_ref': "",
-                'secretary': "",
-                'kat_sec': "",
-                # 'gamer': "",
-                'vid_turnira': self.selected_tournament_type,
-                'tab_enabled': "1",
-                'r_date': rating_date_str
-            }
-            
-            # Создаем запись в БД
-            title = Title.create(**title_data)
-            self.current_title_id = title.id
-            
-            # Очищаем информацию о соревновании
-            for label in [self.comp_name_label, self.comp_sredi_label, self.comp_vozrast_label,
-                        self.comp_dates_label, self.comp_mesto_label,
-                        self.comp_referee_label, self.comp_referee_category_label,
-                        self.comp_secretary_label, self.comp_secretary_category_label]:
-                if label:
-                    label.setText("-")
-            
-            # Скрываем информацию, показываем форму
-            self.info_group.setVisible(False)
-            self.new_comp_frame.setVisible(True)  # <--- ФОРМА ДОЛЖНА БЫТЬ ВИДНА
-            
-            # Очищаем поля формы (но не скрываем её!)
-            self.new_comp_name.clear()
-            self.new_comp_sredi.setCurrentIndex(0)
-            self.new_comp_vozrast.setCurrentIndex(0)
-            self.new_comp_start.setDate(QDate.currentDate())
-            self.new_comp_end.setDate(QDate.currentDate().addDays(7))
-            self.new_comp_mesto.clear()
-            self.new_comp_referee.clear()
-            self.new_comp_referee_cat.setCurrentIndex(0)
-            self.new_comp_secretary.clear()
-            self.new_comp_secretary_cat.setCurrentIndex(0)
-            
-            # Устанавливаем фокус на поле название
-            self.new_comp_name.setFocus()
-            
-            QMessageBox.information(self, "Успех", 
-                                f"✅ Рейтинги успешно загружены!\n"
-                                f"📅 Дата рейтинга: {rating_date_str}\n"
-                                f"🏆 Тип соревнования: {self.selected_tournament_type}\n\n"
-                                f"Теперь заполните информацию о соревновании.")
+        result = dialog.exec_()
+
+        if result == QDialog.Accepted:
+            # пользователь загрузил рейтинги (возможно частично/полностью)
+            pass
+        else:
+            # Отмена/закрытие. Спросим, продолжать ли без загрузки рейтингов
+            # Проверим, есть ли вообще рейтинги в БД
+            has_ratings = False
+            try:
+                has_ratings = (
+                    R_list_m.select().count() > 0 or
+                    R_list_d.select().count() > 0
+                )
+            except Exception:
+                has_ratings = False
+
+            if has_ratings:
+                reply = QMessageBox.question(
+                    self, "Загрузка рейтингов отменена",
+                    "Вы отменили загрузку рейтингов.\n\n"
+                    "Продолжить создание соревнования с текущими рейтингами "
+                    "из базы данных?\n\n"
+                    "(Рейтинги можно будет загрузить позже — "
+                    "меню «Рейтинг → Обновить рейтинг».)",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if reply != QMessageBox.Yes:
+                    return
+            else:
+                reply = QMessageBox.question(
+                    self, "Загрузка рейтингов отменена",
+                    "Вы отменили загрузку рейтингов, а в базе данных рейтингов нет.\n\n"
+                    "Создать соревнование без рейтингов?\n"
+                    "(Участников можно будет добавлять вручную; "
+                    "рейтинг можно будет ввести при добавлении или загрузить позже.)",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
+        # ─── Продолжаем создание соревнования (rating_date_str нужен всегда) ───
+        rating_date_str = QDate.currentDate().toString("yyyy_MM")
+
+        # Проверка на актуальность: только если рейтинги были загружены сейчас
+        if result == QDialog.Accepted and not self.check_existing_rating(rating_date_str):
+            return
+        # Создаем запись в таблице Title с временными значениями
+        current_date = QDate.currentDate().toPyDate()
+        rating_date_str = QDate.currentDate().toString("yyyy_MM")
+        
+        # Временные значения для short_name и full_name
+        temp_short_name = "Новое"
+        temp_full_name = f"Новое соревнование.{rating_date_str}.не указано"
+        # ... далее весь существующий код создания Title ...
+        title_data = {
+            'name': "",
+            'short_name_comp': temp_short_name,
+            'full_name_comp': temp_full_name,
+            'sredi': "",
+            'vozrast': "",
+            'data_start': current_date,
+            'data_end': current_date,
+            'mesto': "",
+            'city': "",
+            'referee': "",
+            'kat_ref': "",
+            'secretary': "",
+            'kat_sec': "",
+            'vid_turnira': self.selected_tournament_type,
+            'tab_enabled': "1",
+            'multiregion': 0,
+            'perenos': 0,
+            'otchestvo': 0,
+            'r_date': rating_date_str if result == QDialog.Accepted else ""
+        }
+
+        title = Title.create(**title_data)
+        self.current_title_id = title.id
+
+        # Очищаем информацию о соревновании
+        for label in [self.comp_name_label, self.comp_sredi_label,
+                      self.comp_vozrast_label, self.comp_dates_label,
+                      self.comp_mesto_label, self.comp_referee_label,
+                      self.comp_referee_category_label,
+                      self.comp_secretary_label, self.comp_secretary_category_label]:
+            if label:
+                label.setText("-")
+
+        # Скрываем информацию, показываем форму
+        self.info_group.setVisible(False)
+        self.new_comp_frame.setVisible(True)
+
+        # Очищаем поля формы
+        self.new_comp_name.clear()
+        self.new_comp_sredi.setCurrentIndex(0)
+        self.new_comp_vozrast.setCurrentIndex(0)
+        self.new_comp_start.setDate(QDate.currentDate())
+        self.new_comp_end.setDate(QDate.currentDate().addDays(7))
+        self.new_comp_mesto.clear()
+        self.new_comp_referee.clear()
+        self.new_comp_referee_cat.setCurrentIndex(0)
+        self.new_comp_secretary.clear()
+        self.new_comp_secretary_cat.setCurrentIndex(0)
+
+        self.new_comp_name.setFocus()
+
+        if result == QDialog.Accepted:
+            QMessageBox.information(
+                self, "Успех",
+                f"✅ Рейтинги успешно загружены!\n"
+                f"📅 Дата рейтинга: {rating_date_str}\n"
+                f"🏆 Тип соревнования: {self.selected_tournament_type}\n\n"
+                f"Теперь заполните информацию о соревновании."
+            )
+        else:
+            QMessageBox.information(
+                self, "Создание соревнования",
+                f"🏆 Тип соревнования: {self.selected_tournament_type}\n\n"
+                f"Теперь заполните информацию о соревновании.\n\n"
+                f"Рейтинги можно загрузить позже:\n"
+                f"меню «Рейтинг → 🔄 Обновить рейтинг»."
+            )
 
     def create_menu_bar(self):
         """Создание меню"""
@@ -9904,32 +9945,32 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'tabs'):
             self.tabs.setCurrentIndex(1)  # индекс вкладки "Импорт"
 
-    def check_old_backups_on_startup(self):
-        """Проверка старых бэкапов при запуске"""
-        backup_dir = "backup_db"
-        if not os.path.exists(backup_dir):
-            return
+    # def check_old_backups_on_startup(self):
+    #     """Проверка старых бэкапов при запуске"""
+    #     backup_dir = "backup_db"
+    #     if not os.path.exists(backup_dir):
+    #         return
         
-        days = 3
-        now = datetime.now()
-        old_files = []
-        for filename in os.listdir(backup_dir):
-            filepath = os.path.join(backup_dir, filename)
-            if os.path.isfile(filepath) and filename.lower().endswith(('.sql', '.zip')):
-                mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
-                if (now - mtime).days >= days:
-                    old_files.append(filepath)
+    #     days = 3
+    #     now = datetime.now()
+    #     old_files = []
+    #     for filename in os.listdir(backup_dir):
+    #         filepath = os.path.join(backup_dir, filename)
+    #         if os.path.isfile(filepath) and filename.lower().endswith(('.sql', '.zip')):
+    #             mtime = datetime.fromtimestamp(os.path.getmtime(filepath))
+    #             if (now - mtime).days >= days:
+    #                 old_files.append(filepath)
         
-        if old_files:
-            reply = QMessageBox.question(
-                self,
-                "Обнаружены старые бэкапы",
-                f"В папке {backup_dir} найдено {len(old_files)} бэкапов старше {days} дней.\n\n"
-                f"Открыть управление бэкапами?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                self.open_backup_management()
+    #     if old_files:
+    #         reply = QMessageBox.question(
+    #             self,
+    #             "Обнаружены старые бэкапы",
+    #             f"В папке {backup_dir} найдено {len(old_files)} бэкапов старше {days} дней.\n\n"
+    #             f"Открыть управление бэкапами?",
+    #             QMessageBox.Yes | QMessageBox.No
+    #         )
+    #         if reply == QMessageBox.Yes:
+    #             self.open_backup_management()
 # ================================
     def clear_system_data(self):
         """Очистка всех данных системы проведения для текущего соревнования"""
@@ -11185,28 +11226,28 @@ class MainWindow(QMainWindow):
 
     def on_new_referee_text_changed(self, text):
         """Поиск судьи при вводе текста"""
-        if len(text) >= 3:
+        if len(text) >= 2:
             self.find_referee_in_db(text, self.new_comp_referee_cat)
 
     def on_new_secretary_text_changed(self, text):
         """Поиск секретаря при вводе текста"""
-        if len(text) >= 3:
+        if len(text) >= 2:
             self.find_referee_in_db(text, self.new_comp_secretary_cat)
 
-    def find_referee_in_db(self, search_text, category_combo):
-        """Поиск судьи в базе данных"""
-        try:
-            from models import Referee
-            referees = Referee.select().where(Referee.family.contains(search_text))
+    # def find_referee_in_db(self, search_text, category_combo):
+    #     """Поиск судьи в базе данных"""
+    #     try:
+    #         # from models import Referee
+    #         referees = Referee.select().where(Referee.family.contains(search_text))
             
-            if referees.count() > 0:
-                referee = referees.first()
-                # Устанавливаем категорию
-                index = category_combo.findText(referee.category)
-                if index >= 0:
-                    category_combo.setCurrentIndex(index)
-        except Exception as e:
-            print(f"Ошибка поиска судьи: {e}")
+    #         if referees.count() > 0:
+    #             referee = referees.first()
+    #             # Устанавливаем категорию
+    #             index = category_combo.findText(referee.category)
+    #             if index >= 0:
+    #                 category_combo.setCurrentIndex(index)
+    #     except Exception as e:
+    #         print(f"Ошибка поиска судьи: {e}")
 
     def check_rating_date(self, new_date):
         """Проверка актуальности даты рейтинга"""
@@ -35003,7 +35044,7 @@ class GskManagementDialog(QDialog):
 
         QMessageBox.information(self, "Успех", "Состав ГСК сохранён")
         self.accept()
-
+# ==== Загрузка рейтинга ====
 class RatingLoaderThread(QThread):
     progress = pyqtSignal(int)
     status = pyqtSignal(str)
@@ -35018,6 +35059,23 @@ class RatingLoaderThread(QThread):
         self.file_index = file_index
         self.total_files = total_files
         self._is_running = True
+
+    # @staticmethod
+    # def _check_ratings_current():
+    #     """
+    #     Проверяет, загружен ли рейтинг за текущий месяц.
+    #     Признак — существование Title с r_date == 'yyyy_MM' текущего месяца.
+    #     Возвращает: (ratings_current: bool, current_month: str)
+    #     """
+    #     try:
+    #         current_month = QDate.currentDate().toString("yyyy_MM")
+    #         existing = Title.select().where(
+    #             Title.r_date == current_month
+    #         ).first()
+    #         return (existing is not None), current_month
+    #     except Exception as e:
+    #         print(f"_check_ratings_current: {e}")
+    #         return False, QDate.currentDate().toString("yyyy_MM")
     
     def stop(self):
         self._is_running = False
@@ -35272,13 +35330,32 @@ class RatingFileDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Загрузка рейтингов")
         self.setModal(True)
-        self.setMinimumWidth(700)
-        
+        self.setMinimumWidth(780)   # чуть шире из-за чекбоксов
+
+        # Проверяем актуальность рейтинга за текущий месяц
+        self.ratings_current, self.current_rating_month = self._check_ratings_current()
+             
         layout = QVBoxLayout(self)
         
         # Информация
-        info_label = QLabel("Выберите файлы рейтингов в следующем порядке:")
-        info_label.setStyleSheet("font-weight: bold; font-size: 12px; margin-bottom: 10px;")
+        if self.ratings_current:
+            info_label = QLabel(
+                f"⚠ Рейтинги за {self.current_rating_month} уже загружены.\n"
+                f"Все файлы отмечены «Пропустить» — можно просто закрыть "
+                f"диалог или снять галочки у тех файлов, которые нужно перезагрузить."
+            )
+            info_label.setStyleSheet(
+                "font-weight: bold; font-size: 12px; margin-bottom: 10px; "
+                "color: #E65100; background-color: #FFF3E0; padding: 6px; border-radius: 4px;"
+            )
+        else:
+            info_label = QLabel("Выберите файлы рейтингов в следующем порядке:")
+            info_label.setStyleSheet(
+                "font-weight: bold; font-size: 12px; margin-bottom: 10px;"
+            )
+        layout.addWidget(info_label)
+        # info_label = QLabel("Выберите файлы рейтингов в следующем порядке:")
+        # info_label.setStyleSheet("font-weight: bold; font-size: 12px; margin-bottom: 10px;")
         layout.addWidget(info_label)
         
         # Список файлов
@@ -35318,7 +35395,16 @@ class RatingFileDialog(QDialog):
             file_progress.setMaximumHeight(20)
             file_progress.setStyleSheet("QProgressBar::chunk { background-color: #4CAF50; }")
             file_layout.addWidget(file_progress)
-            
+
+                        # Чекбокс «Пропустить»
+            skip_cb = QCheckBox("Пропустить")
+            skip_cb.setToolTip(
+                "Не загружать этот файл — использовать уже загруженные данные"
+            )
+            skip_cb.setChecked(self.ratings_current)
+            skip_cb.stateChanged.connect(self._update_load_button_state)
+            file_layout.addWidget(skip_cb)
+
             # Кнопка выбора
             select_btn = QPushButton("📂 Выбрать")
             select_btn.setStyleSheet("""
@@ -35331,12 +35417,31 @@ class RatingFileDialog(QDialog):
                 }
                 QPushButton:hover { background-color: #45a049; }
             """)
-            # ИСПРАВЛЕНО: передаем все необходимые аргументы в лямбду
-            select_btn.clicked.connect(lambda checked, t=table, lbl=file_path_label, g=gender, btn=select_btn, prog=file_progress: 
-                                       self.select_file(t, lbl, g, btn, prog))
+            select_btn.clicked.connect(lambda checked, t=table, lbl=file_path_label,
+                                       g=gender, btn=select_btn, prog=file_progress,
+                                       cb=skip_cb:
+                                       self.select_file(t, lbl, g, btn, prog, cb))
             file_layout.addWidget(select_btn)
-            
+
             layout.addWidget(file_frame)
+            # # Кнопка выбора
+            # select_btn = QPushButton("📂 Выбрать")
+            # select_btn.setStyleSheet("""
+            #     QPushButton {
+            #         background-color: #4CAF50;
+            #         color: white;
+            #         padding: 5px 10px;
+            #         font-size: 10px;
+            #         border-radius: 3px;
+            #     }
+            #     QPushButton:hover { background-color: #45a049; }
+            # """)
+            # # ИСПРАВЛЕНО: передаем все необходимые аргументы в лямбду
+            # select_btn.clicked.connect(lambda checked, t=table, lbl=file_path_label, g=gender, btn=select_btn, prog=file_progress: 
+            #                            self.select_file(t, lbl, g, btn, prog))
+            # file_layout.addWidget(select_btn)
+            
+            # layout.addWidget(file_frame)
             
             self.files_info.append({
                 'table': table,
@@ -35346,6 +35451,7 @@ class RatingFileDialog(QDialog):
                 'frame': file_frame,
                 'button': select_btn,
                 'progress': file_progress,
+                'skip_checkbox': skip_cb,          # ← НОВОЕ
                 'index': idx
             })
         
@@ -35416,35 +35522,57 @@ class RatingFileDialog(QDialog):
         
         self.current_index = 0
         self.setMinimumHeight(500)
+
+        self._update_load_button_state()   # ← НОВОЕ
     
-    def select_file(self, table, label, gender, button, progress):
+    @staticmethod
+    def _check_ratings_current():
+        """
+        Проверяет, загружен ли рейтинг за текущий месяц.
+        Признак — существование Title с r_date == 'yyyy_MM' текущего месяца.
+        Возвращает: (ratings_current: bool, current_month: str)
+        """
+        try:
+            current_month = QDate.currentDate().toString("yyyy_MM")
+            existing = Title.select().where(
+                Title.r_date == current_month
+            ).first()
+            return (existing is not None), current_month
+        except Exception as e:
+            print(f"_check_ratings_current: {e}")
+            return False, QDate.currentDate().toString("yyyy_MM")
+
+    def select_file(self, table, label, gender, button, progress, skip_checkbox=None):
         """Выбор файла"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, 
-            f"Выберите файл для {table}", 
-            "", 
+            self,
+            f"Выберите файл для {table}",
+            "",
             "Excel files (*.xlsx)"
         )
-        
+
         if file_path:
             file_name = os.path.basename(file_path).lower()
-            
+
             if not file_name.endswith('.xlsx'):
-                QMessageBox.warning(self, "Ошибка", "Можно загружать только файлы с расширением .xlsx")
+                QMessageBox.warning(self, "Ошибка",
+                                    "Можно загружать только файлы с расширением .xlsx")
                 return
-            
+
             name_part = file_name.replace('.xlsx', '')
             if gender == 'm' and 'm' not in name_part and 'муж' not in name_part:
-                QMessageBox.warning(self, "Ошибка", f"Файл должен содержать 'm' или 'муж' в названии")
+                QMessageBox.warning(self, "Ошибка",
+                                    "Файл должен содержать 'm' или 'муж' в названии")
                 return
-            
+
             if gender == 'w' and 'w' not in name_part and 'жен' not in name_part:
-                QMessageBox.warning(self, "Ошибка", f"Файл должен содержать 'w' или 'жен' в названии")
+                QMessageBox.warning(self, "Ошибка",
+                                    "Файл должен содержать 'w' или 'жен' в названии")
                 return
-            
+
             label.setText(f"✅ {os.path.basename(file_path)}")
             label.setStyleSheet("color: green; font-size: 10px; font-weight: bold;")
-            
+
             button.setStyleSheet("""
                 QPushButton {
                     background-color: #FF9800;
@@ -35456,79 +35584,145 @@ class RatingFileDialog(QDialog):
                 QPushButton:hover { background-color: #F57C00; }
             """)
             button.setText("🔄 Изменить")
-            
+
             for info in self.files_info:
                 if info['table'] == table:
                     info['path'] = file_path
+                    # если выбрали файл — чекбокс «Пропустить» снимаем
+                    if skip_checkbox is not None and skip_checkbox.isChecked():
+                        skip_checkbox.setChecked(False)
                     break
-            
-            self.selected_count = sum(1 for info in self.files_info if info['path'] is not None)
-            self.status_label.setText(f"📁 Выбрано файлов: {self.selected_count} из {len(self.files_info)}")
-            
-            all_selected = all(info['path'] for info in self.files_info)
-            self.load_btn.setEnabled(all_selected)
-            
-            if all_selected:
-                self.status_label.setText("✅ Все файлы выбраны! Нажмите 'Загрузить все'")
-                self.status_label.setStyleSheet("font-size: 11px; color: #4CAF50; font-weight: bold;")
+
+            self.selected_count = sum(
+                1 for info in self.files_info if info['path'] is not None
+            )
+            self.status_label.setText(
+                f"📁 Выбрано файлов: {self.selected_count} из {len(self.files_info)}"
+            )
+
+            self._update_load_button_state()
+
+    def _update_load_button_state(self):
+        """Разрешает загрузку, если каждый файл либо выбран, либо помечен «Пропустить»."""
+        all_ready = True
+        for info in self.files_info:
+            skip = info['skip_checkbox'].isChecked()
+            has_path = info['path'] is not None
+            if not skip and not has_path:
+                all_ready = False
+                break
+
+        self.load_btn.setEnabled(all_ready)
+
+        if all_ready:
+            skipped = sum(1 for i in self.files_info if i['skip_checkbox'].isChecked())
+            to_load = len(self.files_info) - skipped
+
+            if to_load == 0:
+                self.status_label.setText(
+                    "✅ Все файлы помечены «Пропустить». "
+                    "Нажмите «Загрузить все» — рейтинги не изменятся."
+                )
+            else:
+                self.status_label.setText(
+                    f"✅ Готово. Будет загружено: {to_load}, "
+                    f"пропущено: {skipped}"
+                )
+            self.status_label.setStyleSheet(
+                "font-size: 11px; color: #4CAF50; font-weight: bold;"
+            )
     
     def start_loading(self):
-        """Начало загрузки всех файлов"""
+        """Начало загрузки всех файлов (кроме помеченных «Пропустить»)."""
         self.load_btn.setEnabled(False)
         self.total_progress_bar.setVisible(True)
         self.total_progress_bar.setValue(0)
         self.current_index = 0
         self.loader_threads = []
-        
-        # Показываем прогресс-бары для каждого файла
+
+        skipped_total = 0
+        to_load_total = 0
+
         for info in self.files_info:
-            info['progress'].setVisible(True)
-            info['progress'].setValue(0)
+            skip = info['skip_checkbox'].isChecked()
             info['button'].setEnabled(False)
-            # Сбрасываем статус текста
-            if info['path']:
-                info['label'].setText(f"⏳ Ожидание загрузки...")
+            info['skip_checkbox'].setEnabled(False)
+
+            if skip:
+                # файл помечен «Пропустить»
+                info['progress'].setVisible(False)
+                info['label'].setText("⏭️ Пропущен")
                 info['label'].setStyleSheet("color: gray; font-size: 10px;")
-        
-        self.status_label.setText("⏳ Начинаем загрузку рейтингов...")
-        self.load_next_file()
-    
-    def load_next_file(self):
-        """Загрузка следующего файла"""
-        if self.current_index >= len(self.files_info):
+                skipped_total += 1
+            elif info['path']:
+                info['progress'].setVisible(True)
+                info['progress'].setValue(0)
+                info['label'].setText("⏳ Ожидание загрузки...")
+                info['label'].setStyleSheet("color: gray; font-size: 10px;")
+                to_load_total += 1
+            else:
+                # путь не выбран и не пропущен — теоретически не должно быть,
+                # т.к. кнопка не была бы активна
+                info['progress'].setVisible(False)
+                info['label'].setText("⏭️ Пропущен (нет файла)")
+                info['label'].setStyleSheet("color: gray; font-size: 10px;")
+                skipped_total += 1
+
+        if to_load_total == 0:
+            # все файлы пропущены — просто закрываем диалог
             self.total_progress_bar.setValue(100)
-            self.status_label.setText("✅ Все рейтинги успешно загружены!")
-            QMessageBox.information(self, "Успех", "Все рейтинги успешно загружены!")
+            self.status_label.setText(
+                "✅ Ничего не загружалось — рейтинги не изменены."
+            )
+            QMessageBox.information(
+                self, "Загрузка не требуется",
+                "Все файлы помечены «Пропустить».\n"
+                "Рейтинги в базе не изменялись."
+            )
             self.accept()
             return
-        
-        info = self.files_info[self.current_index]
-        
-        if info['path'] is None:
-            # Пропускаем файл, если он не выбран
-            info['progress'].setVisible(False)
-            info['label'].setText("⏭️ Пропущен")
-            info['label'].setStyleSheet("color: gray; font-size: 10px;")
-            self.current_index += 1
-            self.load_next_file()
+
+        self.status_label.setText(
+            f"⏳ Загрузка: {to_load_total} из {len(self.files_info)} "
+            f"(пропущено: {skipped_total})"
+        )
+        self.load_next_file()
+
+    def load_next_file(self):
+        """Загрузка следующего файла."""
+        # Ищем следующий файл, который нужно загрузить (не «Пропустить» и есть path)
+        while self.current_index < len(self.files_info):
+            info = self.files_info[self.current_index]
+            if info['skip_checkbox'].isChecked() or info['path'] is None:
+                self.current_index += 1
+                continue
+            break
+
+        if self.current_index >= len(self.files_info):
+            self.total_progress_bar.setValue(100)
+            self.status_label.setText("✅ Загрузка завершена!")
+            QMessageBox.information(self, "Успех", "Рейтинги успешно загружены!")
+            self.accept()
             return
-        
+
+        info = self.files_info[self.current_index]
         info['progress'].setValue(0)
         info['label'].setText(f"⏳ Загрузка {os.path.basename(info['path'])}...")
         info['label'].setStyleSheet("color: orange; font-size: 10px;")
-        
+
         self.current_loader = RatingLoaderThread(
-            info['path'], 
+            info['path'],
             info['table'],
             self.current_index + 1,
-            len([f for f in self.files_info if f['path'] is not None])  # Только выбранные файлы
+            len([f for f in self.files_info
+                 if not f['skip_checkbox'].isChecked() and f['path'] is not None])
         )
         self.current_loader.progress.connect(self.total_progress_bar.setValue)
         self.current_loader.file_progress.connect(self.update_file_progress)
         self.current_loader.status.connect(self.status_label.setText)
         self.current_loader.finished.connect(self.on_file_loaded)
         self.current_loader.start()
-        
+
         self.loader_threads.append(self.current_loader)
 
     def update_file_progress(self, progress, filename):
