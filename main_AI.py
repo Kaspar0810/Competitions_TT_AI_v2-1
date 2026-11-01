@@ -1767,38 +1767,70 @@ class MainWindow(QMainWindow):
         # Обновляем кнопки
         self.create_category_buttons()
 
-    def on_referee_text_changed(self, text):
-        """Поиск судьи в БД при вводе текста"""
-        if len(text) >= 2:  # Начинаем поиск после 3 символов
-            self.find_referee_in_db(text, self.referee_category_combo)
+    def on_new_referee_text_changed(self, text):
+        """Поиск судьи при вводе текста (главный судья)."""
+        # Не искать, если строка уже содержит '/' (значит, автозаполнили)
+        if len(text) >= 2 and "/" not in text:
+            self.find_referee_in_db(
+                text,
+                self.new_comp_referee,        # ← QLineEdit поля
+                self.new_comp_referee_cat,    # ← QComboBox категории
+            )
 
-    def on_secretary_text_changed(self, text):
-        """Поиск секретаря в БД при вводе текста"""
-        if len(text) >= 2:
-            self.find_referee_in_db(text, self.secretary_category_combo)
+    def on_new_secretary_text_changed(self, text):
+        """Поиск секретаря при вводе текста (главный секретарь)."""
+        if len(text) >= 2 and "/" not in text:
+            self.find_referee_in_db(
+                text,
+                self.new_comp_secretary,
+                self.new_comp_secretary_cat,
+            )
 
-    def find_referee_in_db(self, search_text, category_combo):
-        """Поиск судьи в базе данных"""
-        try:          
-            # Ищем судью по фамилии (частичное совпадение)
+    def find_referee_in_db(self, search_text, name_edit, category_combo):
+        """
+        Поиск судьи в базе данных.
+
+        При нахождении:
+        • в поле name_edit подставляется строка «Фамилия И.О./Город»
+            (или «Фамилия И.О.», если города нет, или уже готовая
+            строка, если в поле family уже есть '/' );
+        • в category_combo устанавливается соответствующая категория.
+        """
+        try:
             referees = Referee.select().where(Referee.family.contains(search_text))
-            
+
             if referees.count() > 0:
-                # Нашли судью, подставляем его категорию
                 referee = referees.first()
-                
-                # Устанавливаем категорию в comboBox
+
+                family_raw = (referee.family or "").strip()
+                city_raw = (referee.city or "").strip()
+
+                # family может быть уже в формате "Фамилия И.О./Город"
+                if "/" in family_raw:
+                    full_str = family_raw
+                elif city_raw:
+                    full_str = f"{family_raw}/{city_raw}"
+                else:
+                    full_str = family_raw
+
+                # Подставляем в поле — блокируем сигналы, чтобы не вызвать рекурсию
+                name_edit.blockSignals(True)
+                try:
+                    name_edit.setText(full_str)
+                finally:
+                    name_edit.blockSignals(False)
+
+                # Устанавливаем категорию
                 category_text = self.get_category_display(referee.category)
-                index = category_combo.findText(category_text)
-                if index >= 0:
-                    category_combo.setCurrentIndex(index)
-                
-                # Показываем подсказку
+                idx = category_combo.findText(category_text)
+                if idx >= 0:
+                    category_combo.setCurrentIndex(idx)
+
                 self.show_referee_tooltip(referee.family, referee.category)
             else:
-                # Не нашли - сбрасываем категорию
+                # Не нашли — сбрасываем категорию
                 category_combo.setCurrentIndex(0)
-                
+
         except Exception as e:
             print(f"Ошибка поиска судьи: {e}")
 
@@ -9567,21 +9599,22 @@ class MainWindow(QMainWindow):
         dialog = RatingFileDialog(self)
         result = dialog.exec_()
 
+         # Есть ли в БД хоть какие-то рейтинги (загруженные ранее)
+        has_ratings = False
+        try:
+            has_ratings = (
+                R_list_m.select().count() > 0 or
+                R_list_d.select().count() > 0
+            )
+        except Exception:
+            has_ratings = False
+
         if result == QDialog.Accepted:
             # пользователь загрузил рейтинги (возможно частично/полностью)
             pass
         else:
             # Отмена/закрытие. Спросим, продолжать ли без загрузки рейтингов
-            # Проверим, есть ли вообще рейтинги в БД
-            has_ratings = False
-            try:
-                has_ratings = (
-                    R_list_m.select().count() > 0 or
-                    R_list_d.select().count() > 0
-                )
-            except Exception:
-                has_ratings = False
-
+            # Отмена/закрытие диалога загрузки
             if has_ratings:
                 reply = QMessageBox.question(
                     self, "Загрузка рейтингов отменена",
@@ -9593,15 +9626,11 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.Yes
                 )
-                if reply != QMessageBox.Yes:
-                    return
             else:
                 reply = QMessageBox.question(
                     self, "Загрузка рейтингов отменена",
                     "Вы отменили загрузку рейтингов, а в базе данных рейтингов нет.\n\n"
-                    "Создать соревнование без рейтингов?\n"
-                    "(Участников можно будет добавлять вручную; "
-                    "рейтинг можно будет ввести при добавлении или загрузить позже.)",
+                    "Создать соревнование без рейтингов?",
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.No
                 )
@@ -9641,7 +9670,7 @@ class MainWindow(QMainWindow):
             'multiregion': 0,
             'perenos': 0,
             'otchestvo': 0,
-            'r_date': rating_date_str if result == QDialog.Accepted else ""
+            'r_date': rating_date_str if (result == QDialog.Accepted or has_ratings) else ""
         }
 
         title = Title.create(**title_data)
@@ -9675,20 +9704,16 @@ class MainWindow(QMainWindow):
         self.new_comp_name.setFocus()
 
         if result == QDialog.Accepted:
-            QMessageBox.information(
-                self, "Успех",
-                f"✅ Рейтинги успешно загружены!\n"
-                f"📅 Дата рейтинга: {rating_date_str}\n"
-                f"🏆 Тип соревнования: {self.selected_tournament_type}\n\n"
-                f"Теперь заполните информацию о соревновании."
-            )
+            rating_note = f"📅 Дата рейтинга: {rating_date_str} (загружены сейчас)"
+        elif has_ratings:
+            rating_note = f"📅 Дата рейтинга: {rating_date_str} (используются уже загруженные)"
         else:
-            QMessageBox.information(
-                self, "Создание соревнования",
-                f"🏆 Тип соревнования: {self.selected_tournament_type}\n\n"
-                f"Теперь заполните информацию о соревновании.\n\n"
-                f"Рейтинги можно загрузить позже:\n"
-                f"меню «Рейтинг → 🔄 Обновить рейтинг»."
+            rating_note = "📅 Рейтинг ещё не загружен — загрузите позже через меню «Рейтинг»"
+        QMessageBox.information(
+            self, "Создание соревнования",
+            f"🏆 Тип соревнования: {self.selected_tournament_type}\n\n"
+            f"{rating_note}\n\n"
+            f"Теперь заполните информацию о соревновании."
             )
 
     def create_menu_bar(self):
@@ -11319,31 +11344,6 @@ class MainWindow(QMainWindow):
             for year in range(current_year - 5, current_year + 2):
                 self.year_combo.addItem(str(year))
             self.year_combo.blockSignals(False)
-
-    def on_new_referee_text_changed(self, text):
-        """Поиск судьи при вводе текста"""
-        if len(text) >= 2:
-            self.find_referee_in_db(text, self.new_comp_referee_cat)
-
-    def on_new_secretary_text_changed(self, text):
-        """Поиск секретаря при вводе текста"""
-        if len(text) >= 2:
-            self.find_referee_in_db(text, self.new_comp_secretary_cat)
-
-    # def find_referee_in_db(self, search_text, category_combo):
-    #     """Поиск судьи в базе данных"""
-    #     try:
-    #         # from models import Referee
-    #         referees = Referee.select().where(Referee.family.contains(search_text))
-            
-    #         if referees.count() > 0:
-    #             referee = referees.first()
-    #             # Устанавливаем категорию
-    #             index = category_combo.findText(referee.category)
-    #             if index >= 0:
-    #                 category_combo.setCurrentIndex(index)
-    #     except Exception as e:
-    #         print(f"Ошибка поиска судьи: {e}")
 
     def check_rating_date(self, new_date):
         """Проверка актуальности даты рейтинга"""
