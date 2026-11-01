@@ -1375,34 +1375,129 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes | QMessageBox.No
                 )
                 if reply == QMessageBox.Yes:
-                    self.open_update_rating_dialog()
+                    outdated_ids = [tid for tid, _, _, _, _ in outdated]
+                    self.open_update_rating_dialog(outdated_ids=outdated_ids)
+                
         except Exception as e:
             print(f"Ошибка проверки рейтинга: {e}")
             import traceback
             traceback.print_exc()
 
-    def open_update_rating_dialog(self):
-        """Открывает диалог загрузки рейтингов и обновляет рейтинг участников"""
-        # from import_initial_data import RatingFileDialog  # или откуда у вас диалог
+    # def open_update_rating_dialog(self):
+    #     """Открывает диалог загрузки рейтингов и обновляет рейтинг участников"""
+    #     # from import_initial_data import RatingFileDialog  # или откуда у вас диалог
 
+    #     try:
+    #         dialog = RatingFileDialog(self)
+    #         if dialog.exec_() != QDialog.Accepted:
+    #             return
+
+    #         # После успешной загрузки обновляем рейтинги участников
+    #         updated_count = self.update_players_rating_from_lists()
+
+    #         # Обновляем r_date в Title на текущий месяц
+    #         current_month = QDate.currentDate().toString("yyyy_MM")
+    #         Title.update(r_date=current_month).execute()
+    #         print(f"r_date обновлён на {current_month}")
+
+    #         QMessageBox.information(
+    #             self,
+    #             "Успех",
+    #             f"Рейтинг обновлён.\nОбновлено записей участников: {updated_count}\n"
+    #             f"Дата рейтинга: {current_month}"
+    #         )
+
+    #         # Обновляем таблицу участников, если она открыта
+    #         if self.current_title_id:
+    #             self.load_participants_for_title()
+
+    #     except Exception as e:
+    #         QMessageBox.critical(self, "Ошибка", f"Не удалось обновить рейтинг: {str(e)}")
+    #         import traceback
+    #         traceback.print_exc()
+
+    def open_update_rating_dialog(self, outdated_ids=None):
+        """
+        Открывает диалог загрузки рейтингов и обновляет рейтинг участников.
+
+        outdated_ids:
+            • список title_id, для которых нужно обновить r_date
+              (передаётся из check_rating_actual — «те, что предлагалось обновить»);
+            • None — вызов из меню «Рейтинг → Обновить рейтинг».
+              В этом случае r_date обновляется только у активных
+              (ещё не завершившихся) соревнований.
+        """
         try:
             dialog = RatingFileDialog(self)
             if dialog.exec_() != QDialog.Accepted:
                 return
 
-            # После успешной загрузки обновляем рейтинги участников
+            # Проверяем, был ли реальный импорт хотя бы одного файла
+            any_loaded = True
+            if hasattr(dialog, 'files_info'):
+                any_loaded = any(
+                    (not info['skip_checkbox'].isChecked()) and info['path']
+                    for info in dialog.files_info
+                )
+
+            if not any_loaded:
+                QMessageBox.information(
+                    self, "Информация",
+                    "Файлы не загружались (все отмечены «Пропустить»).\n"
+                    "Рейтинги и дата рейтинга не изменены."
+                )
+                return
+
+            # Обновляем рейтинг участников текущего соревнования из R_list_*
             updated_count = self.update_players_rating_from_lists()
 
-            # Обновляем r_date в Title на текущий месяц
             current_month = QDate.currentDate().toString("yyyy_MM")
-            Title.update(r_date=current_month).execute()
-            print(f"r_date обновлён на {current_month}")
+
+            # ─── Обновляем r_date только у нужных соревнований ───
+            if outdated_ids:
+                # Вызов из check_rating_actual — ровно те, что предлагалось обновить
+                titles_updated = (Title
+                                  .update(r_date=current_month)
+                                  .where(Title.id.in_(outdated_ids))
+                                  .execute())
+                scope_note = f"(только соревнования, для которых предлагалось обновить: {len(outdated_ids)})"
+
+            else:
+                # Вызов из меню — только активные (ещё не завершившиеся)
+                from datetime import date
+                first_day_of_month = date.today().replace(day=1)
+                titles_updated = (Title
+                                  .update(r_date=current_month)
+                                  .where(Title.data_end >= first_day_of_month)
+                                  .execute())
+                scope_note = "(только активные соревнования)"
+             # Собираем имена обновлённых соревнований для отчёта
+            if outdated_ids:
+                updated_titles = list(
+                    Title.select(Title.name)
+                    .where(Title.id.in_(outdated_ids))
+                    .order_by(Title.data_start.desc())
+                )
+            else:
+                from datetime import date
+                first_day_of_month = date.today().replace(day=1)
+                updated_titles = list(
+                    Title.select(Title.name)
+                    .where(Title.data_end >= first_day_of_month)
+                    .order_by(Title.data_start.desc())
+                )
+
+            titles_list = "\n".join(f"• {t.name}" for t in updated_titles[:10])
+            if len(updated_titles) > 10:
+                titles_list += f"\n… и ещё {len(updated_titles) - 10}"
 
             QMessageBox.information(
-                self,
-                "Успех",
-                f"Рейтинг обновлён.\nОбновлено записей участников: {updated_count}\n"
-                f"Дата рейтинга: {current_month}"
+                self, "Успех",
+                f"Рейтинг обновлён.\n"
+                f"Обновлено записей участников: {updated_count}\n"
+                f"Дата рейтинга: {current_month}\n"
+                f"Соревнований обновлено: {titles_updated} {scope_note}\n\n"
+                f"{titles_list}"
             )
 
             # Обновляем таблицу участников, если она открыта
@@ -1410,7 +1505,8 @@ class MainWindow(QMainWindow):
                 self.load_participants_for_title()
 
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка", f"Не удалось обновить рейтинг: {str(e)}")
+            QMessageBox.critical(self, "Ошибка",
+                                 f"Не удалось обновить рейтинг: {str(e)}")
             import traceback
             traceback.print_exc()
 
@@ -35424,24 +35520,6 @@ class RatingFileDialog(QDialog):
             file_layout.addWidget(select_btn)
 
             layout.addWidget(file_frame)
-            # # Кнопка выбора
-            # select_btn = QPushButton("📂 Выбрать")
-            # select_btn.setStyleSheet("""
-            #     QPushButton {
-            #         background-color: #4CAF50;
-            #         color: white;
-            #         padding: 5px 10px;
-            #         font-size: 10px;
-            #         border-radius: 3px;
-            #     }
-            #     QPushButton:hover { background-color: #45a049; }
-            # """)
-            # # ИСПРАВЛЕНО: передаем все необходимые аргументы в лямбду
-            # select_btn.clicked.connect(lambda checked, t=table, lbl=file_path_label, g=gender, btn=select_btn, prog=file_progress: 
-            #                            self.select_file(t, lbl, g, btn, prog))
-            # file_layout.addWidget(select_btn)
-            
-            # layout.addWidget(file_frame)
             
             self.files_info.append({
                 'table': table,
