@@ -3404,49 +3404,6 @@ class MainWindow(QMainWindow):
             print(f"Ошибка подготовки данных пар: {e}")
             return {}
 
-    # def setka_data(self, fin, posev_data):
-    #     """данные сетки"""
-    #     tds = []
-    #     fam_name_city = []
-    #     fam_name = []
-    #     fam_name_shot = {}
-        
-    #     # Для пар используем posev_data напрямую
-    #     system = System.get_or_none(
-    #         (System.title_id == self.current_title_id) & 
-    #         (System.stage == fin)
-    #     )
-        
-    #     mp = system.max_player
-    #     mp = self.full_net_player(mp)
-        
-    #     for i in range(1, mp * 2 + 1, 2):
-    #         pos = (i + 1) // 2
-    #         player_data = posev_data.get(pos)
-    #         if not player_data:
-    #             family = "X"
-    #             fam_name_city.append("X")
-    #             fam_name_shot["X"] = None
-    #         else:
-    #             family_city = player_data.get('name_city', '')
-    #             fam_name_shot[player_data.get('name', '')] = player_data.get('player_id')
-                
-    #             if family_city != 'X':
-    #                 znak = family_city.find("/")
-    #                 if znak != -1:
-    #                     f = family_city[:znak]
-    #                     c = family_city[znak + 1:]
-    #                     family = f"{f}\n{c}"
-    #                 else:
-    #                     family = family_city
-    #             else:
-    #                 family = 'X'
-    #             fam_name_city.append(family_city)
-            
-    #         tds.append(family)
-    #         fam_name.append(fam_name_shot)
-        
-    #     return [tds, fam_name_city, fam_name]
 # ============== Создание вкладок ====
     def create_system_tab(self):
         """Вкладка Система"""
@@ -17168,15 +17125,6 @@ class MainWindow(QMainWindow):
                 # Заполняем таблицу Result после жеребьевки
                 self.fill_results_after_drawing()
 
-                # # включаем вкладку -Результаты-
-                # title = Title.get_by_id(self.current_title_id)
-                # tab_enabled = title.tab_enabled if title.tab_enabled else "Титул"
-                
-                # # Добавляем вкладку Результаты после жеребьевки, если её нет
-                # if "Результаты" not in tab_enabled:
-                #     tab_enabled += " Результаты"
-                #     title.tab_enabled = tab_enabled
-                #     title.save()
             
                 QMessageBox.information(self, "Автоматическая жеребьевка", 
                                     f"✅ Жеребьевка для этапа '{stage}' успешно проведена!\n\n"

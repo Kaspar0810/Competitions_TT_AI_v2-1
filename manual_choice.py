@@ -3533,10 +3533,7 @@ class ManualNetDrawDialog(QDialog):
     # Сохранение
     # ----------------------------------------------
     def save_drawing(self):
-
-        # if len(self.net_positions) != len(self.all_players):
-        #     QMessageBox.warning(self, "Ошибка", f"Не все позиции заполнены. Осталось {self.max_players - len(self.net_positions)}")
-        #     return
+        paries_list = ["Мужские пары", "Женские пары", "Смешанные пары"]
 
         reply = QMessageBox.question(
             self,
@@ -3547,7 +3544,20 @@ class ManualNetDrawDialog(QDialog):
         if reply != QMessageBox.Yes:
             return
 
+        
         try:
+            if self.stage_name in paries_list:
+                Choice_double_player.update(posev=0).where(
+                    (Choice_double_player.title_id == self.title_id) &
+                    (Choice_double_player.vid_para == self.sex)
+                ).execute()
+            else:
+                Choice.update(posev_final=0, final="").where(
+                    (Choice.title_id == self.title_id) &
+                    (Choice.sex == self.sex) &
+                    (Choice.final == self.stage_name)
+                ).execute()
+
             Game_list.delete().where(
                 (Game_list.title_id == self.title_id) &
                 (Game_list.system_id == self.current_system.id)
@@ -3558,24 +3568,29 @@ class ManualNetDrawDialog(QDialog):
                 (Result.system_id == self.current_system.id)
             ).execute()
 
-   
-            Choice.update(posev_final=0, final="").where(
-                (Choice.title_id == self.title_id) &
-                (Choice.sex == self.sex) &
-                (Choice.final == self.stage_name)
-            ).execute()
+            if self.stage_name in paries_list:
+                for pos, data in self.net_positions.items():
+                    Choice_double_player.update(posev=pos).where(
+                        (Choice_double_player.title_id == self.title_id) &
+                        (Choice_double_player.vid_para == self.sex) & 
+                        (Choice_double_player.player_double_id == data['player_id'])
+                    ).execute()
 
-            for pos, data in self.net_positions.items():
-                Choice.update(posev_final=pos, final=self.stage_name).where(
-                    (Choice.title_id == self.title_id) &
-                    (Choice.sex == self.sex) & 
-                    (Choice.player_choice_id == data['player_id'])
-                ).execute()
+                choices = Choice_double_player.select().where((Choice_double_player.title_id == self.title_id) &
+                                                (Choice_double_player.vid_para == self.sex)
+                                                )
+            else:
+                for pos, data in self.net_positions.items():
+                    Choice.update(posev_final=pos, final=self.stage_name).where(
+                        (Choice.title_id == self.title_id) &
+                        (Choice.sex == self.sex) & 
+                        (Choice.player_choice_id == data['player_id'])
+                    ).execute()
 
-            choices = Choice.select().where((Choice.title_id == self.title_id) &
-                                            (Choice.final == self.stage_name) &
-                                            (Choice.sex == self.sex)
-                                            )
+                choices = Choice.select().where((Choice.title_id == self.title_id) &
+                                                (Choice.final == self.stage_name) &
+                                                (Choice.sex == self.sex)
+                                                )
             # ===== если не полная сетка записываем Х на свободные места
             self.free_place_in_setka()
 
@@ -3594,27 +3609,45 @@ class ManualNetDrawDialog(QDialog):
                         'name':'X'
                     }
                 else:
-                    # id = tmp_list[0]
-                    pl_id = Player.get(Player.id == id)
-                    family_city = pl_id.fio_city
-                    family_shot = pl_id.fio
-                    posev_data[i] = {
-                    'player_id':id,
-                        'name_city':family_city,
-                        'name':family_shot
-                    }
+                    if self.stage_name in paries_list:
+                        pl_id = Players_double.get(Players_double.id == id)
+                        family_city = pl_id.para_full
+                        family_shot = pl_id.para_shot
+                        posev_data[i] = {
+                        'player_id':id,
+                            'name_city':family_city,
+                            'name':family_shot
+                        }
+                    else:
+                        pl_id = Player.get(Player.id == id)
+                        family_city = pl_id.fio_city
+                        family_shot = pl_id.fio
+                        posev_data[i] = {
+                        'player_id':id,
+                            'name_city':family_city,
+                            'name':family_shot
+                        }
             # # заполняем Game_list Choice
            
-
             for pos, data in self.net_positions.items():
-                Game_list.create(
-                    number_group=self.stage_name,
-                    rank_num_player=pos,
-                    player_group_id=data['player_id'],
-                    system_id=self.current_system.id,
-                    title_id=self.title_id,
-                    sex=self.sex if self.sex else "man"
-                )
+                if self.stage_name in paries_list:
+                    Game_list.create(
+                        number_group=self.stage_name,
+                        rank_num_player=pos,
+                        player_double_id=data['player_id'],
+                        system_id=self.current_system.id,
+                        title_id=self.title_id,
+                        sex=self.sex if self.sex else "man"
+                    )
+                else:
+                    Game_list.create(
+                        number_group=self.stage_name,
+                        rank_num_player=pos,
+                        player_group_id=data['player_id'],
+                        system_id=self.current_system.id,
+                        title_id=self.title_id,
+                        sex=self.sex if self.sex else "man"
+                    )
 
             # # 7. Создаём туры и матчи заполняем Results
             max_pl = self.max_players
