@@ -21153,6 +21153,7 @@ class MainWindow(QMainWindow):
                             ('FONTSIZE', (0, 0), (-1, -1), 7),
                             ('FONTNAME', (1, 0), (1, 16), "DejaVuSerif-Bold"),
                             ('FONTSIZE', (1, 0), (1, 16), 7),
+                            ('LEADING', (1, 0), (1, 16), 7),
                             # 10 столбец с 0 по 68 ряд (цвет места)
                             ('TEXTCOLOR', (8, 0), (8, 39), colors.red),
                             ('ALIGN', (8, 0), (8, 39), 'RIGHT'),
