@@ -2004,7 +2004,6 @@ def choice_group_manual(self, athletes, num_groups, stage, parent=None):
     
     else:
         return None
-#====================== новый вариант с ручной жеребьевкой полуфиналов ===========
 # ========== РУЧНАЯ ЖЕРЕБЬЁВКА ПОЛУФИНАЛОВ (ОБНОВЛЁННАЯ) ==========
 class SemiFinalManual(QDialog):
     """
@@ -3021,10 +3020,17 @@ class ManualNetDrawDialog(QDialog):
                 vid = "mix"
 
         # Загружаем пары из Players_double
-        query = Players_double.select().where(
-            (Players_double.title_id == self.title_id) &
-            (Players_double.double_vid == vid)
-        )
+        # query = Players_double.select().where(
+        #     (Players_double.title_id == self.title_id) &
+        #     (Players_double.double_vid == vid)
+        # )
+        query = (Players_double
+         .select()
+         .where(
+             (Players_double.title_id == self.title_id) &
+             (Players_double.double_vid == vid) &
+             ~((Players_double.player_1 == "X") & (Players_double.player_2 == "X"))
+         ))
 
         # Если есть места из final_info, фильтруем по ним (используем поле posev или r_sum)
         # Для пар обычно используются все пары, участвующие в финале
@@ -3729,19 +3735,47 @@ class ManualNetDrawDialog(QDialog):
                 value = self.net_table.item(row, 0).text()
                 free_num.append(int(value))
 
-        # Получаем ID игрока X
-        x_player_id = self.parent.get_x_player_id()
+        # # Получаем ID игрока X
+        # x_player_id = self.parent.get_x_player_id()
 
-        # Создаем данные для игрока X
+        # # Создаем данные для игрока X
+        # x_player_data = {
+        #     'player_id': x_player_id,  # id
+        #     'name': "X",          # name
+        #     'region': "",           # region
+        #     'group_number': 0,            # group_number
+        #     'group': "",           # group
+        #     'city': "",           # city
+        #     'rank': 0,            # rank
+        #     'place': 0             # place
+        # }
+
+        is_pairs = self.stage_name in (
+            "Мужские пары", "Женские пары", "Смешанные пары"
+        )
+
+        if is_pairs:
+            x_player_id = self.parent.get_or_create_x_double(self.sex)
+        else:
+            x_player_id = self.parent.get_x_player_id()
+
+        if not x_player_id:
+            # не смогли получить/создать X — прерываем
+            QMessageBox.warning(
+                self, "Ошибка",
+                f"Не удалось получить игрока X для {'пар' if is_pairs else 'личных'}."
+            )
+            return
+
         x_player_data = {
-            'player_id': x_player_id,  # id
-            'name': "X",          # name
-            'region': "",           # region
-            'group_number': 0,            # group_number
-            'group': "",           # group
-            'city': "",           # city
-            'rank': 0,            # rank
-            'place': 0             # place
+            'player_id': x_player_id,
+            'name': "X",
+            'region': "",
+            'group_number': 0,
+            'group': "",
+            'city': "",
+            'rank': 0,
+            'place': 0,
         }
 
         # Заполняем свободные места данными игрока X
@@ -3839,8 +3873,7 @@ class ManualNetDrawDialog(QDialog):
                 sex=self.sex if self.sex else "man"
             )
 
-        print(f"Создано {total_games} записей в Result для {stage_name}")
-        
+        print(f"Создано {total_games} записей в Result для {stage_name}")      
 # ======new =====
     def _place_player_on_position(self, pos, player_data):
         """Размещает игрока на позиции, удаляя его из списка оставшихся"""
