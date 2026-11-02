@@ -184,8 +184,10 @@ class MainWindow(QMainWindow):
 
         self.is_editing_mode = False  # Флаг режима редактирования
 
-
-
+        self.doubles_mode = "list"
+        # фильтры результатов пар
+        self.current_doubles_stage_filter = None      # None = все стадии
+        self.current_doubles_status_filter = "all"    # all / played / unplayed
     
 # import sys
 # import os
@@ -2393,39 +2395,70 @@ class MainWindow(QMainWindow):
             self.double_players_model.set_highlight_rows([])
         QMessageBox.information(self, "Сортировка", "Список пар отсортирован по рейтингу")
 
+    # def on_doubles_mode_changed(self, button):
+    #     """Переключение между списком пар и результатами"""
+    #     if button == self.radio_list_mode:
+    #         self.doubles_mode = "list"
+    #         # Форма — страница списков
+    #         self.doubles_forms_stack.setCurrentIndex(0)
+    #         # Таблица в table_container — список пар
+    #         self.table_container.setCurrentWidget(self.doubles_table_view)
+    #         self.table_header.setText("🤝 Список пар")
+    #         self.table_header.setStyleSheet("""
+    #             background-color: #4CAF50;
+    #             color: white;
+    #             padding: 6px;
+    #             font-weight: bold;
+    #             font-size: 11px;
+    #             border-radius: 3px;
+    #         """)
+    #         self.load_doubles_for_title()
+    #     else:
+    #         self.doubles_mode = "results"
+    #         # Форма — страница результатов
+    #         self.doubles_forms_stack.setCurrentIndex(1)
+    #         # Таблица в table_container — результаты
+    #         self.table_container.setCurrentWidget(self.doubles_results_table_view)
+    #         self.table_header.setText("📊 Результаты парных матчей")
+    #         self.table_header.setStyleSheet("""
+    #             background-color: #FF9800;
+    #             color: white;
+    #             padding: 6px;
+    #             font-weight: bold;
+    #             font-size: 11px;
+    #             border-radius: 3px;
+    #         """)
+    #         self.load_doubles_results()
+
     def on_doubles_mode_changed(self, button):
-        """Переключение между списком пар и результатами"""
+        """Переключение между списком пар и результатами."""
         if button == self.radio_list_mode:
             self.doubles_mode = "list"
-            # Форма — страница списков
             self.doubles_forms_stack.setCurrentIndex(0)
-            # Таблица в table_container — список пар
             self.table_container.setCurrentWidget(self.doubles_table_view)
             self.table_header.setText("🤝 Список пар")
-            self.table_header.setStyleSheet("""
-                background-color: #4CAF50;
-                color: white;
-                padding: 6px;
-                font-weight: bold;
-                font-size: 11px;
-                border-radius: 3px;
-            """)
+            self.table_header.setStyleSheet(
+                "background-color:#4CAF50; color:white; padding:6px; "
+                "font-weight:bold; font-size:11px; border-radius:3px;"
+            )
+            # скрываем фильтры результатов
+            if hasattr(self, 'doubles_filters_widget'):
+                self.doubles_filters_widget.setVisible(False)
             self.load_doubles_for_title()
+
         else:
             self.doubles_mode = "results"
-            # Форма — страница результатов
             self.doubles_forms_stack.setCurrentIndex(1)
-            # Таблица в table_container — результаты
             self.table_container.setCurrentWidget(self.doubles_results_table_view)
             self.table_header.setText("📊 Результаты парных матчей")
-            self.table_header.setStyleSheet("""
-                background-color: #FF9800;
-                color: white;
-                padding: 6px;
-                font-weight: bold;
-                font-size: 11px;
-                border-radius: 3px;
-            """)
+            self.table_header.setStyleSheet(
+                "background-color:#FF9800; color:white; padding:6px; "
+                "font-weight:bold; font-size:11px; border-radius:3px;"
+            )
+            # показываем фильтры и обновляем список стадий
+            if hasattr(self, 'doubles_filters_widget'):
+                self.doubles_filters_widget.setVisible(True)
+            self.refresh_doubles_stage_filter()
             self.load_doubles_results()
 
     def on_double_vid_changed(self):
@@ -2453,19 +2486,93 @@ class MainWindow(QMainWindow):
         for double in query:
             self.doubles_match_combo.addItem(f"{double.player_1} / {double.player_2}", double.id)
 
+    # def load_doubles_results(self):
+    #     """Загрузка результатов парных матчей из таблицы Result"""
+    #     if not self.current_title_id:
+    #         self.doubles_results_model.setData([])
+    #         return
+
+    #     try:
+    #         # Определяем вид пары
+    #         vid_map = {"мужские": "man", "женские": "woman", "смешанные": "mix"}
+    #         vid_text = self.double_vid_combo.currentText() if hasattr(self, 'double_vid_combo') else "мужские"
+    #         vid = vid_map.get(vid_text, "man")
+
+    #         # Получаем все парные этапы для текущего соревнования и вида
+    #         stages = System.select().where(
+    #             (System.title_id == self.current_title_id) &
+    #             (System.sex == vid) &
+    #             (System.stage.contains("пары"))
+    #         ).order_by(System.id)
+
+    #         if stages.count() == 0:
+    #             self.doubles_results_model.setData([])
+    #             return
+
+    #         results_data = []
+    #         for stage in stages:
+    #             stage_name = stage.stage
+
+    #             # Получаем записи Result для этого этапа
+    #             results = Result.select().where(
+    #                 (Result.title_id == self.current_title_id) &
+    #                 (Result.system_id == stage.id)
+    #             ).order_by(Result.round, Result.tours)
+
+    #             for res in results:
+    #                 # Номер встречи (tours) — например, "1-2" или "3"
+    #                 tour = res.tours or ""
+
+    #                 # Группа — для пар обычно одна группа
+    #                 group = res.number_group or stage_name
+
+    #                 results_data.append({
+    #                     'id': res.id,
+    #                     'group': group,
+    #                     'tour': tour,
+    #                     'pair1': res.player1 or "",
+    #                     'pair2': res.player2 or "",
+    #                     'winner': res.winner or "",
+    #                     'score_in_game': res.score_in_game or "",     # общий счёт (например, 3:1)
+    #                     'score_match': res.score_win or "",           # счёт по партиям (например, "5,-7,8,-9,6")
+    #                     'stage': stage_name
+    #                 })
+
+    #         # Сортировка по этапу, туру
+    #         def sort_key(x):
+    #             tour_num = 0
+    #             if x['tour']:
+    #                 try:
+    #                     # Если "1-2" — берём первое число
+    #                     tour_num = int(x['tour'].split('-')[0])
+    #                 except:
+    #                     tour_num = 0
+    #             return (x['stage'], tour_num)
+
+    #         results_data.sort(key=sort_key)
+
+    #         self.doubles_results_model.setData(results_data)
+
+    #     except Exception as e:
+    #         print(f"Ошибка загрузки результатов пар: {e}")
+    #         import traceback
+    #         traceback.print_exc()
+    #         self.doubles_results_model.setData([])
+
     def load_doubles_results(self):
-        """Загрузка результатов парных матчей из таблицы Result"""
+        """Загрузка результатов парных матчей из Result с учётом фильтров."""
         if not self.current_title_id:
             self.doubles_results_model.setData([])
             return
 
         try:
-            # Определяем вид пары
             vid_map = {"мужские": "man", "женские": "woman", "смешанные": "mix"}
-            vid_text = self.double_vid_combo.currentText() if hasattr(self, 'double_vid_combo') else "мужские"
+            vid_text = (
+                self.double_vid_combo.currentText()
+                if hasattr(self, 'double_vid_combo') else "мужские"
+            )
             vid = vid_map.get(vid_text, "man")
 
-            # Получаем все парные этапы для текущего соревнования и вида
             stages = System.select().where(
                 (System.title_id == self.current_title_id) &
                 (System.sex == vid) &
@@ -2476,21 +2583,31 @@ class MainWindow(QMainWindow):
                 self.doubles_results_model.setData([])
                 return
 
+            stage_filter = getattr(self, 'current_doubles_stage_filter', None)
+            status_filter = getattr(self, 'current_doubles_status_filter', "all")
+
             results_data = []
             for stage in stages:
                 stage_name = stage.stage
 
-                # Получаем записи Result для этого этапа
                 results = Result.select().where(
                     (Result.title_id == self.current_title_id) &
                     (Result.system_id == stage.id)
                 ).order_by(Result.round, Result.tours)
 
                 for res in results:
-                    # Номер встречи (tours) — например, "1-2" или "3"
-                    tour = res.tours or ""
+                    # --- фильтр по стадии сетки ---
+                    if stage_filter:
+                        if (res.stage_net or "").strip() != stage_filter:
+                            continue
 
-                    # Группа — для пар обычно одна группа
+                    # --- фильтр по статусу ---
+                    if status_filter == "played" and not res.winner:
+                        continue
+                    if status_filter == "unplayed" and res.winner:
+                        continue
+
+                    tour = res.tours or ""
                     group = res.number_group or stage_name
 
                     results_data.append({
@@ -2500,24 +2617,22 @@ class MainWindow(QMainWindow):
                         'pair1': res.player1 or "",
                         'pair2': res.player2 or "",
                         'winner': res.winner or "",
-                        'score_in_game': res.score_in_game or "",     # общий счёт (например, 3:1)
-                        'score_match': res.score_win or "",           # счёт по партиям (например, "5,-7,8,-9,6")
-                        'stage': stage_name
+                        'score_in_game': res.score_in_game or "",
+                        'score_match': res.score_win or "",
+                        'stage': stage_name,
+                        'stage_net': res.stage_net or "",
                     })
 
-            # Сортировка по этапу, туру
             def sort_key(x):
                 tour_num = 0
                 if x['tour']:
                     try:
-                        # Если "1-2" — берём первое число
                         tour_num = int(x['tour'].split('-')[0])
-                    except:
+                    except Exception:
                         tour_num = 0
                 return (x['stage'], tour_num)
 
             results_data.sort(key=sort_key)
-
             self.doubles_results_model.setData(results_data)
 
         except Exception as e:
@@ -2525,6 +2640,101 @@ class MainWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             self.doubles_results_model.setData([])
+
+    def on_doubles_stage_filter_changed(self, text):
+        """Обработчик смены фильтра по стадии."""
+        self.current_doubles_stage_filter = (
+            None if text == "Все стадии" else text
+        )
+        if self.doubles_mode == "results":
+            self.load_doubles_results()
+
+
+    def set_doubles_status_filter(self, status):
+        """Установить фильтр по статусу матчей (all/played/unplayed)."""
+        self.current_doubles_status_filter = status
+        self.btn_doubles_all.setChecked(status == "all")
+        self.btn_doubles_played.setChecked(status == "played")
+        self.btn_doubles_unplayed.setChecked(status == "unplayed")
+        if self.doubles_mode == "results":
+            self.load_doubles_results()
+
+
+    def reset_doubles_filters(self):
+        """Сбросить фильтры результатов пар."""
+        if hasattr(self, 'doubles_stage_filter_combo'):
+            self.doubles_stage_filter_combo.blockSignals(True)
+            self.doubles_stage_filter_combo.setCurrentIndex(0)
+            self.doubles_stage_filter_combo.blockSignals(False)
+        self.current_doubles_stage_filter = None
+        self.current_doubles_status_filter = "all"
+        if hasattr(self, 'btn_doubles_all'):
+            self.btn_doubles_all.setChecked(True)
+        if hasattr(self, 'btn_doubles_played'):
+            self.btn_doubles_played.setChecked(False)
+        if hasattr(self, 'btn_doubles_unplayed'):
+            self.btn_doubles_unplayed.setChecked(False)
+        if self.doubles_mode == "results":
+            self.load_doubles_results()
+
+
+    def refresh_doubles_stage_filter(self):
+        """Заполняет выпадающий список стадиями stage_net для пар текущего вида."""
+        if not hasattr(self, 'doubles_stage_filter_combo'):
+            return
+
+        current = self.doubles_stage_filter_combo.currentText()
+
+        self.doubles_stage_filter_combo.blockSignals(True)
+        self.doubles_stage_filter_combo.clear()
+        self.doubles_stage_filter_combo.addItem("Все стадии")
+
+        try:
+            vid_map = {"мужские": "man", "женские": "woman", "смешанные": "mix"}
+            vid_text = (
+                self.double_vid_combo.currentText()
+                if hasattr(self, 'double_vid_combo') else "мужские"
+            )
+            vid = vid_map.get(vid_text, "man")
+
+            # Собираем stage_net из всех Result для этого вида
+            stages = set()
+            results = Result.select().where(
+                (Result.title_id == self.current_title_id) &
+                (Result.sex == vid) &
+                (Result.stage_net.is_null(False)) &
+                (Result.stage_net != "")
+            )
+            for r in results:
+                sn = (r.stage_net or "").strip()
+                if sn and not sn.startswith("Ошибка"):
+                    stages.add(sn)
+
+            def stage_order(name):
+                import re
+                s = str(name).strip().lower()
+                if s.startswith("за"):
+                    m = re.search(r'\d+', s)
+                    return 10 + int(m.group()) if m else 10
+                if "1/16" in s: return 1
+                if "1/8"  in s: return 2
+                if "1/4"  in s: return 3
+                if "1/2"  in s: return 4
+                if "финал" in s: return 5
+                return 99
+
+            for v in sorted(stages, key=stage_order):
+                self.doubles_stage_filter_combo.addItem(v, v)
+
+            # восстанавливаем текущее, если было
+            idx = self.doubles_stage_filter_combo.findText(current)
+            if idx >= 0:
+                self.doubles_stage_filter_combo.setCurrentIndex(idx)
+
+        except Exception as e:
+            print(f"refresh_doubles_stage_filter: {e}")
+        finally:
+            self.doubles_stage_filter_combo.blockSignals(False)
 
     def save_doubles_result(self):
         """Сохранение результата парного матча"""
@@ -2642,6 +2852,9 @@ class MainWindow(QMainWindow):
 
             # --- Случай 5: обычная игра ---
             else:
+                # ---- Обычная игра ----
+                flag_status = 0
+
                 has_error = False
                 error_messages = []
 
@@ -2649,6 +2862,14 @@ class MainWindow(QMainWindow):
                 player1_wins = 0
                 player2_wins = 0
 
+                # Сбрасываем подсветку предыдущих ошибок
+                for _edit in self.doubles_score_edits_p1:
+                    if _edit:
+                        _edit.setStyleSheet("")
+                for _edit in self.doubles_score_edits_p2:
+                    if _edit:
+                        _edit.setStyleSheet("")
+# ======================
                 for i in range(parties_count):
                     edit1 = self.doubles_score_edits_p1[i] if i < len(self.doubles_score_edits_p1) else None
                     edit2 = self.doubles_score_edits_p2[i] if i < len(self.doubles_score_edits_p2) else None
@@ -2673,24 +2894,24 @@ class MainWindow(QMainWindow):
                         edit2.setStyleSheet("background-color: #FFB6C1;")
                         continue
 
-                    # # Пересчитываем победы
-                    # player1_wins = 0
-                    # player2_wins = 0
-
                     s1 = int(score1)
                     s2 = int(score2)
+
+                    # ---- ПРАВИЛЬНАЯ ЗАПИСЬ ----
+                    # score_win = разница (счёт соперника или свой счёт со знаком),
+                    # всегда от лица победителя матча.
                     if s1 > s2:
-                        pl1_win.append(s2)
-                        pl2_win.append(-s2)
-                        player1_wins = len([x for x in pl1_win if x >= 0])
+                        pl1_win.append(s2)         # player1 выиграл партию → счёт соперника (+)
+                        pl2_win.append(-s2)        # player2 проиграл → свой счёт (−)
+                        player1_wins += 1
                     else:
-                        pl1_win.append(-s2)
-                        pl2_win.append(s2)
-                        player2_wins = len([x for x in pl2_win if x >= 0])
+                        pl1_win.append(-s1)        # player1 проиграл → свой счёт (−)
+                        pl2_win.append(s1)         # player2 выиграл → счёт соперника (+)
+                        player2_wins += 1
 
                     if player1_wins == 3 or player2_wins == 3:
                         break
-
+# ====================
                 if has_error:
                     QMessageBox.warning(self, "Ошибка ввода", "\n".join(error_messages))
                     return
@@ -2721,7 +2942,6 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(self, "Ошибка", "Ни одна партия не заполнена корректно")
                     return
 
-                # Определяем победителя
                 if player1_wins > player2_wins:
                     winner_name = match.player1
                     loser_name = match.player2
@@ -2729,7 +2949,7 @@ class MainWindow(QMainWindow):
                     points_loser = 1
                     score_in_game = f"{player1_wins} : {player2_wins}"
                     score_loser_game = f"{player2_wins} : {player1_wins}"
-                    score_win = ','.join([str(x) for x in pl1_win]) if pl1_win else ""
+                    score_win = ','.join([str(num) for num in pl1_win])
                 else:
                     winner_name = match.player2
                     loser_name = match.player1
@@ -2737,7 +2957,7 @@ class MainWindow(QMainWindow):
                     points_loser = 1
                     score_in_game = f"{player2_wins} : {player1_wins}"
                     score_loser_game = f"{player1_wins} : {player2_wins}"
-                    score_win = ','.join([str(x) for x in pl2_win]) if pl2_win else ""
+                    score_win = ','.join([str(num) for num in pl2_win])
 
             # --- Сохранение результата ---
             match.winner = winner_name
@@ -2823,21 +3043,6 @@ class MainWindow(QMainWindow):
 
             # Сбрасываем выбранный матч
             self.current_doubles_result_id = None
-
-            # Автоматический переход к следующему матчу
-            try:
-                model = self.doubles_results_table_view.model()
-                if model and model.rowCount() > 0:
-                    # Ищем следующий несыгранный матч
-                    for row in range(model.rowCount()):
-                        rec = Result.get_by_id(model.get_id(row))
-                        if rec and not rec.winner:
-                            index = model.index(row, 0)
-                            self.doubles_results_table_view.selectRow(row)
-                            self.on_doubles_result_double_clicked(index)
-                            break
-            except Exception:
-                pass
 
         except Exception as e:
             import traceback
@@ -3020,6 +3225,86 @@ class MainWindow(QMainWindow):
         line2.setFrameShadow(QFrame.Sunken)
         line2.setStyleSheet("background-color: #ccc; max-height: 1px; margin: 10px 0;")
         self.dynamic_filters_layout.addWidget(line2)
+
+        # ---- Фильтры (только для режима «Результаты») ----
+        self.doubles_filters_widget = QWidget()
+        df_layout = QVBoxLayout(self.doubles_filters_widget)
+        df_layout.setContentsMargins(0, 0, 0, 0)
+        df_layout.setSpacing(6)
+
+        df_title = QLabel("🎯 Фильтры результатов")
+        df_title.setStyleSheet("font-weight: bold; font-size: 12px; margin-top: 5px;")
+        df_layout.addWidget(df_title)
+
+        # --- Фильтр по стадии сетки ---
+        stage_row = QHBoxLayout()
+        stage_row.addWidget(QLabel("Стадия:"))
+        self.doubles_stage_filter_combo = QComboBox()
+        self.doubles_stage_filter_combo.addItem("Все стадии")
+        self.doubles_stage_filter_combo.currentTextChanged.connect(
+            self.on_doubles_stage_filter_changed
+        )
+        stage_row.addWidget(self.doubles_stage_filter_combo, 1)
+        df_layout.addLayout(stage_row)
+
+        # --- Статус матчей ---
+        status_title = QLabel("Статус матчей:")
+        status_title.setStyleSheet("font-weight: bold; font-size: 11px; margin-top: 4px;")
+        df_layout.addWidget(status_title)
+
+        status_row = QHBoxLayout()
+        status_row.setSpacing(4)
+
+        self.btn_doubles_all = QPushButton("📋 Все")
+        self.btn_doubles_all.setCheckable(True)
+        self.btn_doubles_all.setChecked(True)
+        self.btn_doubles_all.clicked.connect(
+            lambda: self.set_doubles_status_filter("all")
+        )
+
+        self.btn_doubles_played = QPushButton("✅ Сыгр.")
+        self.btn_doubles_played.setCheckable(True)
+        self.btn_doubles_played.setToolTip("Только сыгранные")
+        self.btn_doubles_played.clicked.connect(
+            lambda: self.set_doubles_status_filter("played")
+        )
+
+        self.btn_doubles_unplayed = QPushButton("⏳ Не сыгр.")
+        self.btn_doubles_unplayed.setCheckable(True)
+        self.btn_doubles_unplayed.setToolTip("Только несыгранные")
+        self.btn_doubles_unplayed.clicked.connect(
+            lambda: self.set_doubles_status_filter("unplayed")
+        )
+
+        for b in (self.btn_doubles_all,
+                  self.btn_doubles_played,
+                  self.btn_doubles_unplayed):
+            b.setStyleSheet("""
+                QPushButton {
+                    padding: 4px 6px; font-size: 10px;
+                    border-radius: 3px; border: 1px solid #ccc;
+                    background-color: #f5f5f5;
+                }
+                QPushButton:checked {
+                    background-color: #4CAF50; color: white;
+                    border-color: #2E7D32;
+                }
+            """)
+            status_row.addWidget(b)
+        df_layout.addLayout(status_row)
+
+        # --- Сброс фильтров ---
+        reset_btn = QPushButton("🔄 Сбросить фильтры")
+        reset_btn.setStyleSheet(
+            "background-color:#f44336; color:white; padding:6px; "
+            "font-size:10px; font-weight:bold; border-radius:4px;"
+        )
+        reset_btn.clicked.connect(self.reset_doubles_filters)
+        df_layout.addWidget(reset_btn)
+
+        # По умолчанию — скрыты (показываются только в режиме «Результаты»)
+        self.doubles_filters_widget.setVisible(False)
+        self.dynamic_filters_layout.addWidget(self.doubles_filters_widget)
 
     def left_panel_system_tab(self):
         """отображение левой панели вкладки система"""
@@ -4358,13 +4643,14 @@ class MainWindow(QMainWindow):
         self.doubles_total_score1.setMaximumWidth(50)
         score_layout.addWidget(self.doubles_total_score1, 1, 2)
 
-        # Для полей первой пары
+        # для полей первой пары
         for i in range(5):
             edit = QLineEdit()
             edit.setMaximumWidth(35)
             edit.setEnabled(False)
             edit.textChanged.connect(self.update_doubles_total_score)
-            # Подключаем обработчик Enter
+            # ▼ сброс подсветки при вводе
+            edit.textChanged.connect(lambda _, e=edit: e.setStyleSheet(""))
             edit.returnPressed.connect(lambda col=i: self.move_to_next_doubles_field(1, col))
             score_layout.addWidget(edit, 1, 3 + i)
             self.doubles_score_edits_p1[i] = edit
@@ -4383,14 +4669,15 @@ class MainWindow(QMainWindow):
         self.doubles_total_score2 = QLineEdit()
         self.doubles_total_score2.setMaximumWidth(50)
         score_layout.addWidget(self.doubles_total_score2, 2, 2)
-    # ===============
-        # Для полей второй пары
+    
+        # для полей второй пары
         for i in range(5):
             edit = QLineEdit()
             edit.setMaximumWidth(35)
             edit.setEnabled(False)
             edit.textChanged.connect(self.update_doubles_total_score)
-            # Подключаем обработчик Enter
+            # ▼ сброс подсветки при вводе
+            edit.textChanged.connect(lambda _, e=edit: e.setStyleSheet(""))
             edit.returnPressed.connect(lambda col=i: self.move_to_next_doubles_field(2, col))
             score_layout.addWidget(edit, 2, 3 + i)
             self.doubles_score_edits_p2[i] = edit
