@@ -2900,21 +2900,33 @@ class MainWindow(QMainWindow):
             if wins_p1 >= required_wins:
                 if hasattr(self, 'doubles_total_score1'):
                     self.doubles_total_score1.setStyleSheet("background-color: #90EE90; font-weight: bold;")
+                if hasattr(self, 'doubles_p1_name'):
+                    self.doubles_p1_name.setStyleSheet("background-color: #90EE90; font-weight: bold;")
                 if hasattr(self, 'doubles_total_score2'):
                     self.doubles_total_score2.setStyleSheet("")
                 # Переносим фокус на кнопку "Сохранить"
-                QTimer.singleShot(100, lambda: self._focus_doubles_save_button())
+                # QTimer.singleShot(100, lambda: self._focus_doubles_save_button())
+                self._focus_doubles_save_button()
+                self.save_doubles_result()
             elif wins_p2 >= required_wins:
                 if hasattr(self, 'doubles_total_score2'):
                     self.doubles_total_score2.setStyleSheet("background-color: #90EE90; font-weight: bold;")
+                if hasattr(self, 'doubles_p2_name'):
+                    self.doubles_p2_name.setStyleSheet("background-color: #90EE90; font-weight: bold;")
                 if hasattr(self, 'doubles_total_score1'):
                     self.doubles_total_score1.setStyleSheet("")
-                QTimer.singleShot(100, lambda: self._focus_doubles_save_button())
+                # QTimer.singleShot(100, lambda: self._focus_doubles_save_button())
+                self._focus_doubles_save_button()
+                self.save_doubles_result()
             else:
                 if hasattr(self, 'doubles_total_score1'):
                     self.doubles_total_score1.setStyleSheet("")
+                if hasattr(self, 'doubles_p1_name'):
+                    self.doubles_p1_name.setStyleSheet("")
                 if hasattr(self, 'doubles_total_score2'):
                     self.doubles_total_score2.setStyleSheet("")
+                if hasattr(self, 'doubles_p2_name'):
+                    self.doubles_p2_name.setStyleSheet("")
 
         except Exception as e:
             print(f"Ошибка обновления общего счёта пар: {e}")
@@ -3101,9 +3113,6 @@ class MainWindow(QMainWindow):
         # Получаем пары из Players_double с учётом вида пары
         vid = self.double_vid_combo.currentText() if hasattr(self, 'double_vid_combo') else "мужские"
         
-        # query = Players_double.select().where(
-        #     (Players_double.title_id == self.current_title_id)
-        # )
         query = (Players_double
          .select()
          .where(
@@ -3255,51 +3264,6 @@ class MainWindow(QMainWindow):
         if self.doubles_score_edits_p1 and self.doubles_score_edits_p1[0]:
             QTimer.singleShot(100, lambda: self.doubles_score_edits_p1[0].setFocus())
 
-    # def move_to_next_doubles_field(self, row, col):
-    #     """
-    #     Переход к следующему полю ввода счёта для пар.
-        
-    #     row: 1 — первая пара, 2 — вторая пара
-    #     col: индекс партии (0..4)
-    #     """
-    #     parties_count = 5  # максимум 5 партий
-
-    #     # Проверяем статусы: если одна из пар "Не играет", сразу сохраняем
-    #     status1 = self.doubles_p1_status.currentText()
-    #     status2 = self.doubles_p2_status.currentText()
-    #     if status1 != "Играет" or status2 != "Играет":
-    #         self.save_doubles_result()
-    #         return
-
-    #     # Получаем введённые значения
-    #     if row == 1:
-    #         score1 = self.doubles_score_edits_p1[col].text().strip()
-    #         score2 = self.doubles_score_edits_p2[col].text().strip() if col < len(self.doubles_score_edits_p2) else ""
-    #     else:
-    #         score1 = self.doubles_score_edits_p1[col].text().strip() if col < len(self.doubles_score_edits_p1) else ""
-    #         score2 = self.doubles_score_edits_p2[col].text().strip()
-
-    #     # Валидация
-    #     if score1 and score2:
-    #         is_valid, error = self.validate_score(score1, score2)
-    #         if not is_valid:
-    #             QMessageBox.warning(self, "Ошибка ввода", f"Партия {col+1}: {error}")
-    #             return
-
-    #     # Определяем следующее поле
-    #     if row == 1:
-    #         # Переход к полю второй пары в той же партии
-    #         if col < len(self.doubles_score_edits_p2) and self.doubles_score_edits_p2[col]:
-    #             self.doubles_score_edits_p2[col].setFocus()
-    #     else:
-    #         # Переход к следующей партии (поле первой пары)
-    #         next_col = col + 1
-    #         if next_col < parties_count and next_col < len(self.doubles_score_edits_p1):
-    #             if self.doubles_score_edits_p1[next_col]:
-    #                 self.doubles_score_edits_p1[next_col].setFocus()
-    #         else:
-    #             # Это была последняя партия — сохраняем результат
-    #             self.save_doubles_result()
     def move_to_next_doubles_field(self, row, col):
         """
         Переход/сохранение по Enter в полях ввода счёта парной встречи.
@@ -3367,11 +3331,13 @@ class MainWindow(QMainWindow):
         if wins_p1 >= required_wins or wins_p2 >= required_wins:
             # Кто-то набрал 3 победы — сохраняем независимо от того,
             # где сейчас курсор
+            self.doubles_save_btn.setFocus()
             self.save_doubles_result()
             return
 
         # ---------- 4) Ввод последней (5-й) партии завершён → сохранить ----------
         if last_filled_idx == parties_count - 1:
+            self.doubles_save_btn.setFocus()
             self.save_doubles_result()
             return
 
@@ -3391,6 +3357,7 @@ class MainWindow(QMainWindow):
                     edit.selectAll()
             else:
                 # Дошли до последней партии — сохраняем
+                self.doubles_save_btn.setFocus()
                 self.save_doubles_result()
 
     def view_doubles_result(self):
@@ -7187,6 +7154,8 @@ class MainWindow(QMainWindow):
         # Включаем кнопку сохранения
         if hasattr(self, 'save_result_btn'):
             self.save_result_btn.setEnabled(True)
+            self.save_result_btn.setFocus(True)
+            # self.
         
         # Устанавливаем фокус на первое поле ввода (для быстрого ввода счета)
         if hasattr(self, 'score_edits_p1') and self.score_edits_p1:
@@ -21940,7 +21909,8 @@ class MainWindow(QMainWindow):
 
         for b in style_color: # цикл окрашивания мест красным цветом
             ts.append(b)
-
+        for b in style_color_schedule: # цикл окрашивания расписания красным цветом
+            ts.append(b)
         t.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
                             ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
                             ('FONTSIZE', (0, 0), (-1, -1), 7),
@@ -21949,7 +21919,7 @@ class MainWindow(QMainWindow):
                             + [
                             # цвет шрифта игроков 1 ого тура
                             ('TEXTCOLOR', (0, 0), (0, 40), colors.blue),
-                            ('TEXTCOLOR', (0, 41), (0, 85), colors.green),
+                            ('TEXTCOLOR', (0, 41), (0, 85), colors.brown),
                             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
     # === надпись финала
         h2 = PS("normal", fontSize=10, fontName="DejaVuSerif-Italic",
@@ -22331,8 +22301,10 @@ class MainWindow(QMainWindow):
         data[61][10] = str(number_of_game)  # создание номеров встреч 32
         data[66][10] = str((number_of_game) * -1)  # номер проигравшего финал (-32)
 
+        # #========= расписание ===========
+        # self.schedule_data(data, fin)
         #========= расписание ===========
-        self.schedule_data(data, fin)
+        style_color_schedule = self.schedule_data(data, fin)
         # ============= данные игроков и встреч и размещение по сетке =============
         if fin != "Чистая сетка":
             tds = self.write_in_setka(data, fin, first_mesto, table, posev_data)
@@ -22380,18 +22352,18 @@ class MainWindow(QMainWindow):
         ts = style   # стиль таблицы (список оформления строк и шрифта)
         for b in style_color:
             ts.append(b)
-
+        for b in style_color_schedule:
+            ts.append(b)
         t.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
-                            ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
-                            ('FONTSIZE', (0, 0), (-1, -1), 7),
-                            ('FONTNAME', (1, 0), (1, 32), "DejaVuSerif-Bold"),
-                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                            ('VALIGN', (1, 0), (1, 64), 'TOP'),
-                            ('FONTSIZE', (1, 0), (1, 32), 7)] + ts 
-                            + [
-                            # цвет шрифта игроков 1 ого тура
-                            ('TEXTCOLOR', (0, 0), (0, 68), colors.blue),
-                            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')])) 
+                                    ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
+                                    ('FONTSIZE', (0, 0), (-1, -1), 5),
+                                    ('FONTNAME', (1, 0), (1, 64), "DejaVuSerif-Bold"),
+                                    ('FONTSIZE', (1, 0), (1, 64), 5),
+                                    ('LEADING', (1, 0), (1, 64), 5), # МЕЖСТРОЧНЫЙ ИНТЕРВАЛ В ЯЧЕЙКЕ (размер 7 = размеру шрифта значит без зазора) 
+                                    # цвет шрифта игроков 1 ого тура
+                                    ('TEXTCOLOR', (0, 0), (0, 68), colors.blue),
+                                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                    ('VALIGN', (1, 0), (1, 64), 'BOTTOM')] + ts))
     # === надпись финала
         h2 = PS("normal", fontSize=10, fontName="DejaVuSerif-Italic",
                 leftIndent=50, textColor=Color(1, 0, 1, 1))  # стиль параграфа (номера таблиц)
@@ -33581,13 +33553,6 @@ class PlanDialog(QDialog):
         outer.addWidget(self.center_widget)
 
         btns = QHBoxLayout()
-        # if not self.read_only:
-        #     save_btn = QPushButton("💾 Сохранить в расписание")
-        #     save_btn.setStyleSheet(
-        #         "background-color:#4CAF50; color:white; padding:6px 14px; font-weight:bold;"
-        #     )
-        #     save_btn.clicked.connect(self.save_to_db)
-        #     btns.addWidget(save_btn)
         btns.addStretch()
         close_btn = QPushButton("Закрыть")
         close_btn.clicked.connect(self.close)
