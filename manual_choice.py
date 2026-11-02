@@ -2818,6 +2818,8 @@ class ManualNetDrawDialog(QDialog):
             self.status_label.setText(f"Загружен этап: {self.stage_name}. Участников: {total}")
 
     def _handle_existing_drawing(self):
+        pairs_list = ["Мужские пары", "Женские пары", "Смешанные пары"]
+        is_paries = self.stage_name
         reply = QMessageBox.question(
             self,
             "Жеребьёвка уже проведена",
@@ -2829,23 +2831,35 @@ class ManualNetDrawDialog(QDialog):
         if reply == QMessageBox.Cancel:
             self.close()
             return
-        elif reply == QMessageBox.Yes:
+        elif reply == QMessageBox.Yes:       
             self.draw_net()
-            self.load_players()
+            if is_paries in pairs_list:
+                self.load_players_pairs()
+            else:
+                self.load_players()
             self.load_existing_net()
             self.save_btn.setEnabled(True)
-            self.status_label.setText(f"Загружена существующая жеребьёвка для {self.stage_name}")
+            self.status_label.setText(
+                f"Загружена существующая жеребьёвка для {self.stage_name}"
+            )
         else:
             # Сброс
             Game_list.delete().where(
                 (Game_list.title_id == self.title_id) &
                 (Game_list.system_id == self.current_system.id)
             ).execute()
-            Choice.update(posev_final=0).where(
-                (Choice.title_id == self.title_id) &
-                (Choice.final == self.stage_name)
-            ).execute()
-            self.load_players()
+            if is_paries in pairs_list:
+                Choice_double_player.update(posev=0).where(
+                    (Choice_double_player.title_id == self.title_id) &
+                    (Choice_double_player.vid_para == self.sex)
+                ).execute()
+                self.load_players_pairs()
+            else:
+                Choice.update(posev_final=0).where(
+                    (Choice.title_id == self.title_id) &
+                    (Choice.final == self.stage_name)
+                ).execute()
+                self.load_players()
             self.draw_net()
             self.save_btn.setEnabled(True)
             self.status_label.setText(f"Старая жеребьёвка сброшена для {self.stage_name}")
@@ -3091,18 +3105,45 @@ class ManualNetDrawDialog(QDialog):
     # ----------------------------------------------
     # Отрисовка сетки
     # ----------------------------------------------
+    # def update_net_display(self):
+    #     """Обновляет отображение сетки и подсветку"""
+    #     if not hasattr(self, 'net_table') or self.net_table is None:
+    #         return
+    #     # Обновляем имена
+    #     for pos, data in self.net_positions.items():
+    #         row = pos - 1
+    #         text = f"{data['name']} / {data['city']} - {data['group']} группа"
+    #         item = QTableWidgetItem(text)
+    #         item.setTextAlignment(Qt.AlignLeft)
+    #         self.net_table.setItem(row, 1, item)
+    #     # Подсветка
+    #     self.highlight_conflicts(self.current_player)
+    #     self.highlight_posev()
     def update_net_display(self):
-        """Обновляет отображение сетки и подсветку"""
         if not hasattr(self, 'net_table') or self.net_table is None:
             return
-        # Обновляем имена
+
+        is_pairs = self.stage_name in (
+            "Мужские пары", "Женские пары", "Смешанные пары"
+        )
+
         for pos, data in self.net_positions.items():
             row = pos - 1
-            text = f"{data['name']} / {data['city']} - {data['group']} группа"
+            if is_pairs:
+                # «Иванов И./Петров П. (Москва)»
+                text = data.get('full_name') or data.get('name', '')
+                if data.get('city'):
+                    text = f"{text} ({data['city']})"
+            else:
+                text = (
+                    f"{data['name']} / {data['city']} - "
+                    f"{data.get('group', 1)} группа"
+                )
+
             item = QTableWidgetItem(text)
             item.setTextAlignment(Qt.AlignLeft)
             self.net_table.setItem(row, 1, item)
-        # Подсветка
+
         self.highlight_conflicts(self.current_player)
         self.highlight_posev()
 
@@ -3509,6 +3550,7 @@ class ManualNetDrawDialog(QDialog):
     # Загрузка существующей жеребьёвки
     # ----------------------------------------------
     def load_existing_net(self):
+        """Загрузка существующей сетки из Game_list (личные и пары)."""
         if not self.current_system:
             return
 
@@ -3517,20 +3559,60 @@ class ManualNetDrawDialog(QDialog):
             (Game_list.system_id == self.current_system.id)
         ).order_by(Game_list.rank_num_player)
 
+        is_pairs = self.stage_name in (
+            "Мужские пары", "Женские пары", "Смешанные пары"
+        )
+
         self.net_positions = {}
+
         for gp in game_players:
             pos = gp.rank_num_player
-            player = Player.get_or_none(Player.id == gp.player_group.id)
-            if player:
+
+            if is_pairs:
+                # ─── ПАРЫ ───
+                if not gp.player_double_id:
+                    # на всякий случай пропускаем — такого не должно быть
+                    continue
+                pair_id = gp.player_double_id.id
+                pair = Players_double.get_or_none(Players_double.id == pair_id)
+                if not pair:
+                    continue
+
+                name_short = pair.para_shot or f"{pair.player_1} / {pair.player_2}"
+                name_full = pair.para_full or name_short
+                city = pair.region_main or ""
+
+                self.net_positions[pos] = {
+                    'player_id': pair_id,
+                    'name': name_short,
+                    'city': city,
+                    'group': 1,          # для пар всегда «1 группа» — не используется
+                    'full_name': name_full,
+                    'player_1': pair.player_1,
+                    'player_2': pair.player_2,
+                }
+                # Удаляем пару из списка ожидания (если там есть)
+                for i, p in enumerate(self.players):
+                    if p.get('player_id') == pair_id:
+                        self.players.pop(i)
+                        break
+
+            else:
+                # ─── ЛИЧНЫЕ ───
+                if not gp.player_group:
+                    continue
+                player = Player.get_or_none(Player.id == gp.player_group.id)
+                if not player:
+                    continue
+
                 self.net_positions[pos] = {
                     'player_id': player.id,
                     'name': player.fio or player.player,
                     'city': player.city or "",
-                    'group': player.group
+                    'group': getattr(player, 'group', None) or 1,
                 }
-                # Удаляем этого игрока из списка, если он там есть
                 for i, p in enumerate(self.players):
-                    if p['player_id'] == player.id:
+                    if p.get('player_id') == player.id:
                         self.players.pop(i)
                         break
 
@@ -3679,7 +3761,7 @@ class ManualNetDrawDialog(QDialog):
             # дополняет номера будущих встреч            
             for i in range(max_pl // 2 + 1, total_game + 1): 
                 with db:
-                    results = Result(number_group=self.stage_name, system_stage="Финальный", player1="", player2="",
+                    results = Result(number_group=self.stage_name, system_stage="финальный", player1="", player2="",
                                     tours=i, title_id=self.title_id,
                                     system_id=self.current_system.id, sex=self.sex).save()
 
