@@ -2869,7 +2869,7 @@ class MainWindow(QMainWindow):
                 for _edit in self.doubles_score_edits_p2:
                     if _edit:
                         _edit.setStyleSheet("")
-# ======================
+
                 for i in range(parties_count):
                     edit1 = self.doubles_score_edits_p1[i] if i < len(self.doubles_score_edits_p1) else None
                     edit2 = self.doubles_score_edits_p2[i] if i < len(self.doubles_score_edits_p2) else None
@@ -2911,7 +2911,7 @@ class MainWindow(QMainWindow):
 
                     if player1_wins == 3 or player2_wins == 3:
                         break
-# ====================
+
                 if has_error:
                     QMessageBox.warning(self, "Ошибка ввода", "\n".join(error_messages))
                     return
@@ -3015,6 +3015,135 @@ class MainWindow(QMainWindow):
                                         res_id_lose.player2 = loser_name
                                     res_id_lose.save()
 
+            # ========= место пар после вылета
+            # ---------- Записываем место в Players_double при вылете ----------
+            try:
+                system_obj = System.get_or_none(System.id == match.system_id)
+                if system_obj and "Олимпийская" in (system_obj.type_table or ""):
+
+                    bracket_size = self.parent.get_olympic_bracket_size(
+                        system_obj.max_player
+                    )
+
+                    # Определяем раунд вылета
+                    eliminated_round = None
+                    if match.round and str(match.round).isdigit():
+                        eliminated_round = int(match.round)
+                    else:
+                        try:
+                            tours_num = int(match.tours)
+                            rounds_played = 0
+                            cum = 0
+                            r = 1
+                            while cum < tours_num and r <= 10:
+                                cum += bracket_size // (2 ** r)
+                                rounds_played = r
+                                r += 1
+                            eliminated_round = rounds_played
+                        except Exception:
+                            eliminated_round = 1
+
+                    import math
+                    total_rounds = int(math.log2(bracket_size)) if bracket_size > 1 else 1
+                    is_final = (eliminated_round == total_rounds)
+
+                    # Есть ли матч за 3-е место?
+                    play_third = self._system_has_third_place_match(system_obj)
+
+                    def _set_pair_mesto(pair_name, place):
+                        if not pair_name or pair_name == "X":
+                            return
+                        pair = Players_double.get_or_none(
+                            (Players_double.title_id == self.current_title_id) &
+                            (Players_double.double_vid == system_obj.sex) &
+                            (Players_double.para_full == pair_name)
+                        )
+                        if pair:
+                            pair.mesto = place
+                            pair.save()
+
+                    if is_final:
+                        # Победитель — 1-е, проигравший — 2-е
+                        _set_pair_mesto(winner_name, 1)
+                        _set_pair_mesto(loser_name, 2)
+                    else:
+                        min_place, max_place = self._doubles_round_places(
+                            bracket_size, eliminated_round,
+                            play_third_place=play_third
+                        )
+                        # Если полуфинал и 3-е не разыгрывается —
+                        # оба полуфиналиста получают «3»
+                        _set_pair_mesto(loser_name, min_place)
+
+            except Exception as e:
+                print(f"Не удалось записать место пары: {e}")            
+            # try:
+            #     # Определяем тип сетки и раунд вылета
+            #     system_obj = System.get_or_none(System.id == match.system_id)
+            #     if system_obj and "Олимпийская" in (system_obj.type_table or ""):
+
+            #         bracket_size = self.get_olympic_bracket_size(
+            #             system_obj.max_player
+            #         )
+
+            #         # Номер раунда, в котором проиграл loser_name
+            #         # (по полю round в Result — если он заполнен;
+            #         #  иначе — по номеру встречи match.tours)
+            #         eliminated_round = None
+            #         if match.round and str(match.round).isdigit():
+            #             eliminated_round = int(match.round)
+            #         else:
+            #             # fallback: определяем раунд по номеру встречи
+            #             # для стандартной сетки
+            #             try:
+            #                 tours_num = int(match.tours)
+            #                 # в 1-м раунде номера 1..bracket_size/2
+            #                 # во 2-м    bracket_size/2+1..bracket_size/2+bracket_size/4
+            #                 # и т.д.
+            #                 rounds_played = 0
+            #                 cum = 0
+            #                 r = 1
+            #                 while cum < tours_num and r <= 10:
+            #                     cum += bracket_size // (2 ** r)
+            #                     rounds_played = r
+            #                     r += 1
+            #                 eliminated_round = rounds_played
+            #             except Exception:
+            #                 eliminated_round = 1
+
+            #         min_place, max_place = self._doubles_round_places(
+            #             bracket_size, eliminated_round
+            #         )
+
+            #         # Обновляем mesto у проигравшей пары
+            #         # (для случая X — mesto не пишем)
+            #         if loser_name and loser_name != "X":
+            #             # Ищем пару по para_full
+            #             loser_pair = Players_double.get_or_none(
+            #                 (Players_double.title_id == self.current_title_id) &
+            #                 (Players_double.double_vid == system_obj.sex) &
+            #                 (Players_double.para_full == loser_name)
+            #             )
+            #             if loser_pair:
+            #                 loser_pair.mesto = min_place
+            #                 loser_pair.save()
+
+            #         # Победитель финала получает 1-е место
+            #         if eliminated_round == int(math.log2(bracket_size)) \
+            #                 if bracket_size >= 2 else False:
+            #             # это финальный раунд — победителю 1-е
+            #             if winner_name and winner_name != "X":
+            #                 winner_pair = Players_double.get_or_none(
+            #                     (Players_double.title_id == self.current_title_id) &
+            #                     (Players_double.double_vid == system_obj.sex) &
+            #                     (Players_double.para_full == winner_name)
+            #                 )
+            #                 if winner_pair:
+            #                     winner_pair.mesto = 1
+            #                     winner_pair.save()
+            # except Exception as e:
+            #     print(f"Не удалось записать место пары: {e}")
+
             # --- Уведомление ---
             QMessageBox.information(self, "Успех",
                                     f"Результат сохранён!\n"
@@ -3047,7 +3176,24 @@ class MainWindow(QMainWindow):
         except Exception as e:
             import traceback
             traceback.print_exc()
-            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить результат: {str(e)}")    
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить результат: {str(e)}") 
+
+    def _system_has_third_place_match(self, system):
+        """
+        Проверяет, разыгрывается ли матч за 3-е место в этой системе.
+        Смотрим type_table: «за 1-3 место» → 3-е разыгрывается;
+        «с розыгрышем всех мест» / «минус 2» — тоже (там все места).
+        Только чистое «выбывание после одного поражения» (если у вас есть
+        отдельный тип) — не разыгрывает.
+        """
+        tt = (system.type_table or "").lower()
+        if "за 1-3" in tt or "1-3" in tt:
+            return True
+        if "с розыгрышем всех" in tt or "minus 2" in tt or "минус 2" in tt:
+            return True
+        # «Олимпийская (минус 2)» / «Олимпийская (с розыгрышем всех мест)» — тоже True.
+        # Если у вас есть отдельный тип «простое выбывание» — он вернёт False.
+        return False   
 # =============================
     def clear_doubles_result_form(self):
         """Очистка формы ввода результата"""
@@ -10255,6 +10401,12 @@ class MainWindow(QMainWindow):
         final_protocol_action.triggered.connect(self.export_final_protocol_pdf)
         view_menu.addAction(final_protocol_action)
         
+        # Итоговый протокол пар
+        final_protocol_pairs_action = QAction("📋 Итоговый протокол пар", self)
+        final_protocol_pairs_action.triggered.connect(
+            self.export_doubles_final_protocol_pdf
+        )
+        view_menu.addAction(final_protocol_pairs_action)
         view_menu.addSeparator()
 
         # Добавляем подменю "Список ГСК"
@@ -10279,6 +10431,8 @@ class MainWindow(QMainWindow):
         view_menu.addAction(schedule_action)
         
         view_menu.addSeparator()
+
+
         
         # ===== НОВОЕ МЕНЮ РЕЗУЛЬТАТЫ =====
         results_view_menu = view_menu.addMenu("📊 Результаты")
@@ -17891,6 +18045,270 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Не удалось создать PDF: {str(e)}")
 
+    def export_doubles_final_protocol_pdf(self):
+        """Итоговый протокол пар: 2 строки на пару + объединённое место."""
+        if not self.current_title_id:
+            QMessageBox.warning(self, "Ошибка", "Сначала выберите соревнование")
+            return
+
+        try:
+            from reportlab.platypus import (
+                SimpleDocTemplate, Table, TableStyle, Paragraph
+            )
+        
+            title = Title.get_by_id(self.current_title_id)
+
+            vid_map = {"мужские": "man", "женские": "woman", "смешанные": "mix"}
+            sex_mark_map = {"man": "M", "woman": "W", "mix": "Mix"}
+            vid_text = (
+                self.double_vid_combo.currentText()
+                if hasattr(self, 'double_vid_combo') else "мужские"
+            )
+            vid = vid_map.get(vid_text, "man")
+            sex_mark = sex_mark_map.get(vid, "M")
+            sex_label = {"man": "Мужские пары",
+                        "woman": "Женские пары",
+                        "mix": "Смешанные пары"}[vid]
+
+            # Пары с присвоенными местами
+            pairs = list(
+                Players_double
+                .select()
+                .where(
+                    (Players_double.title_id == self.current_title_id) &
+                    (Players_double.double_vid == vid) &
+                    (Players_double.mesto > 0) &
+                    ~((Players_double.player_1 == "X") &
+                    (Players_double.player_2 == "X"))
+                )
+                .order_by(Players_double.mesto.asc())
+            )
+
+            if not pairs:
+                QMessageBox.warning(self, "Ошибка",
+                                    "Нет пар с присвоенными местами")
+                return
+
+            # Размер сетки и наличие матча за 3-е
+            system = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == vid) &
+                (System.stage.in_(
+                    ["Мужские пары", "Женские пары", "Смешанные пары"]
+                ))
+            )
+            bracket_size = self.get_olympic_bracket_size(
+                system.max_player if system else 0
+            )
+            play_third = self._system_has_third_place_match(system) if system else False
+
+            # Собираем строки
+            # Для каждой пары: 2 строки (player_1, player_2)
+            # Каждая строка: [mesto_label, full_name, bday, rank, city, region]
+            rows = []           # плоский список строк таблицы (после шапки)
+            span_info = []      # список (row_start, row_end) для объединения «Место»
+
+            def _find_player(fio_short, region):
+                """Ищем в Player по короткому ФИО (Иванов И.И.), региону, городу."""
+                # пробуем точное по fio
+                p = Player.get_or_none(
+                    (Player.title_id == self.current_title_id) &
+                    (Player.fio == fio_short)
+                )
+                if p:
+                    return p
+                # пробуем по player
+                p = Player.get_or_none(
+                    (Player.title_id == self.current_title_id) &
+                    (Player.player == fio_short)
+                )
+                if p:
+                    return p
+                # fallback: частичное совпадение по фамилии
+                surname = fio_short.split()[0] if fio_short.split() else fio_short
+                p = (Player
+                    .select()
+                    .where(
+                        (Player.title_id == self.current_title_id) &
+                        (Player.player.startswith(surname))
+                    )
+                    .first())
+                return p
+
+            def _format_bday(d):
+                if not d:
+                    return ""
+                try:
+                    return d.strftime("%d.%m.%Y")
+                except Exception:
+                    return str(d)
+
+            for pair in pairs:
+                # Определяем «красивую» метку места
+                min_p = pair.mesto
+                if min_p == 1:
+                    label = "1 место"
+                elif min_p == 2:
+                    label = "2 место"
+                elif min_p == 3:
+                    # если 3-е не разыгрывается — два 3-х места
+                    if not play_third and bracket_size >= 4:
+                        label = "3 место"
+                    else:
+                        label = "3 место"
+                elif min_p == 4 and bracket_size >= 4:
+                    label = "4 место"
+                else:
+                    # диапазон 5-8, 9-16, 17-32, …
+                    max_p = min_p
+                    total_rounds = int(math.log2(bracket_size)) if bracket_size >= 2 else 1
+                    for r in range(1, total_rounds + 1):
+                        lo, hi = self._doubles_round_places(
+                            bracket_size, r, play_third_place=play_third
+                        )
+                        if min_p == lo:
+                            max_p = hi
+                            break
+                    if max_p > min_p:
+                        label = f"{min_p}-{max_p} место"
+                    else:
+                        label = f"{min_p} место"
+
+                # Игроки пары
+                p1_short = pair.player_1 or ""
+                p2_short = pair.player_2 or ""
+
+                p1 = _find_player(p1_short, pair.region_1)
+                p2 = _find_player(p2_short, pair.region_2)
+
+                row_start = len(rows)
+
+                for short, player_obj in ((p1_short, p1), (p2_short, p2)):
+                    if player_obj:
+                        full_name = player_obj.fio or player_obj.player or short
+                        bday = _format_bday(player_obj.bday)
+                        rank = str(player_obj.rank or 0)
+                        city = player_obj.city or ""
+                        region = player_obj.region or ""
+                    else:
+                        # не нашли в Player — минимальный набор
+                        full_name = short
+                        bday = ""
+                        rank = ""
+                        city = ""
+                        region = ""
+
+                    rows.append([label, full_name, bday, rank, city, region])
+
+                row_end = len(rows) - 1
+                # объединяем ячейку «Место» на 2 строки
+                if row_end > row_start:
+                    span_info.append((row_start, row_end))
+
+            # Таблица
+            table_data = [["Место", "ФИО", "Дата рожд.",
+                        "R", "Город", "Субъект РФ"]]
+            # +1 к строке из-за шапки
+            for r in rows:
+                table_data.append(r)
+
+            col_widths = [1.6 * cm, 5.7 * cm, 1.8 * cm,
+                        1.0 * cm, 2.7 * cm, 4.5 * cm]
+
+           # Уменьшенная высота строк:
+        #   • шапка        — 0.42 см
+        #   • строки данных — 0.38 см
+        # (под ФИО/город обычно хватает, если шрифт 8pt)
+            row_h = [0.42 * cm] + [0.38 * cm] * (len(table_data) - 1)
+
+            table = Table(
+                table_data,
+                colWidths=col_widths,
+                repeatRows=1,
+                rowHeights=row_h,
+            )
+
+            style = [
+                ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSerif'),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.yellow),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.darkblue),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.darkblue),
+                # Левое выравнивание для ФИО / города / региона
+                ('ALIGN', (1, 1), (1, -1), 'LEFT'),
+                ('ALIGN', (4, 1), (4, -1), 'LEFT'),
+                ('ALIGN', (5, 1), (5, -1), 'LEFT'),
+                ('TOPPADDING',    (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ('LEFTPADDING',   (0, 0), (-1, -1), 1),
+                ('RIGHTPADDING',  (0, 0), (-1, -1), 1),
+            ]
+            # SPAN для «Место» на пару
+            for r_start, r_end in span_info:
+                # +1 из-за шапки
+                style.append((
+                    'SPAN', (0, r_start + 1), (0, r_end + 1)
+                ))
+                style.append((
+                    'VALIGN', (0, r_start + 1), (0, r_end + 1), 'MIDDLE'
+                ))
+
+            table.setStyle(TableStyle(style))
+
+            # Папка и файл
+            pdf_dir = "table_pdf"
+            if not os.path.exists(pdf_dir):
+                os.makedirs(pdf_dir)
+
+            short_name = title.short_name_comp or title.name
+            clean_name = re.sub(r'[\\/*?:"<>|]', "", str(short_name))[:50]
+            filename = os.path.join(
+                pdf_dir, f"{clean_name}_{sex_mark}_pairs_final_protocol.pdf"
+            )
+
+            styles = getSampleStyleSheet() if False else None
+            title_style = PS("TitleStyle", fontSize=14,
+                            fontName="DejaVuSerif-Bold", alignment=1,
+                            spaceAfter=20, textColor=colors.darkblue)
+
+            doc = SimpleDocTemplate(
+                filename, pagesize=A4,
+                topMargin=2 * cm, bottomMargin=2 * cm,
+                leftMargin=1.0 * cm, rightMargin=1.0 * cm,
+            )
+
+            elements = [
+                Paragraph(f"Итоговый протокол. {sex_label}.", title_style),
+                table,
+            ]
+
+            doc.build(elements,
+                    onFirstPage=self.func_zagolovok,
+                    onLaterPages=self.func_zagolovok)
+
+            QMessageBox.information(self, "Успех",
+                                    f"Итоговый протокол пар сохранён:\n{filename}")
+
+            reply = QMessageBox.question(
+                self, "Открыть файл",
+                "Открыть созданный PDF?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if reply == QMessageBox.Yes:
+                if sys.platform == 'win32':
+                    os.startfile(filename)
+                else:
+                    os.system(f'open "{filename}"')
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка",
+                                f"Не удалось создать PDF: {str(e)}")
+
     def determine_net_type(self, final, posev_data):
         """определяем какая сетка для финала используется""" 
         system = System.select().where((System.title_id == self.current_title_id) & (System.stage == final)).get()
@@ -23880,7 +24298,48 @@ class MainWindow(QMainWindow):
         match_titles = {}
         for i in range(1, game + 1):
             match_titles[i] = self.get_match_title(i, game, highest_place, mp)
-        return match_titles               
+        return match_titles  
+
+    def _doubles_round_places(self, bracket_size, eliminated_in_round,
+                          play_third_place=False):
+        """
+        Возвращает (min_place, max_place) для пар, выбывших в указанном раунде
+        олимпийской сетки с вылетом после первого поражения.
+
+        bracket_size       — размер сетки (число пар): 4, 8, 16, 32, 64
+        eliminated_in_round — номер раунда, в котором пара проиграла (1 = 1-й тур)
+        play_third_place   — разыгрывается ли матч за 3-е место
+
+        Пример для сетки 16:
+            раунд 1 → 9-16
+            раунд 2 → 5-8
+            раунд 3 → 3-4 (или два 3-х места, если 3-е не разыгрывается)
+            раунд 4 (финал) → 1 и 2 отдельно
+        """
+        if bracket_size < 2:
+            return (1, 1)
+
+        import math
+        total_rounds = int(math.log2(bracket_size))
+
+        if eliminated_in_round < 1:
+            eliminated_in_round = 1
+        if eliminated_in_round > total_rounds:
+            eliminated_in_round = total_rounds
+
+        if eliminated_in_round == total_rounds:
+            # Финал: 1-е (победитель) и 2-е (проигравший) — НЕ диапазон
+            return (1, 2)
+
+        if eliminated_in_round == total_rounds - 1:
+            # Полуфинал: 3-4 — либо два 3-х, либо 3 и 4
+            if play_third_place:
+                return (3, 4)
+            return (3, 3)   # оба — 3-е место
+
+        max_place = int(bracket_size / (2 ** (eliminated_in_round - 1)))
+        min_place = int(bracket_size / (2 ** eliminated_in_round)) + 1
+        return (min_place, max_place)  
 # ========= пробный вариант матчей в сетке =========
     def _setka_8_full_made(self, fin, posev_data):
             """сетка на 8 в pdf"""
