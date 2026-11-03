@@ -3414,7 +3414,7 @@ class MainWindow(QMainWindow):
                 r_sum=double.r_sum,
                 vid_para=sex,
                 posev=0,  # начальное значение
-                mesto=0
+                mesto_final=0
             )
 
         # записывает в System количество пар
@@ -3437,7 +3437,11 @@ class MainWindow(QMainWindow):
         vid = self.double_vid_combo.currentText() if hasattr(self, 'double_vid_combo') else "мужские"
 
         # Фильтруем пары по виду
-        query = Players_double.select().where(Players_double.title_id == self.current_title_id)
+        query = (Players_double.select().where(
+                    (Players_double.title_id == self.current_title_id) &
+                    # исключаем служебную запись X (создаётся для неполных сеток)
+                    ~((Players_double.player_1 == "X") & (Players_double.player_2 == "X"))
+                        ))
         if vid == "мужские":
             query = query.where(Players_double.double_vid == "man")
         elif vid == "женские":
@@ -20546,7 +20550,6 @@ class MainWindow(QMainWindow):
 
         return data
 
-    # def build_place_matches(self, first_mesto, place_list, match_num):
     def build_place_matches(self, first_mesto, place_list):
         """
         descending=True  -> меньшее место у большего номера встречи
@@ -22934,6 +22937,18 @@ class MainWindow(QMainWindow):
             (System.sex == self.current_sex)
             ).get()
         max_pl = finals.max_player # максимальное число игроков в сетке
+ # ===== Проверяем, разыгрывается ли 3-е место =====
+        play_third = True
+        try:
+            system_obj = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == self.current_sex) &
+                (System.stage == fin)
+            )
+            if system_obj and (system_obj.no_game or "").strip() == "3":
+                play_third = False
+        except Exception as e:
+            print(f"setka_32_made: play_third check: {e}")
 
         if fin in pairs_list:
             first_mesto = 1
@@ -22959,14 +22974,35 @@ class MainWindow(QMainWindow):
             y += 1
             data[i + 1][0] = str(y)  # рисует начальные номера таблицы 1-32
         number_of_game = self.draw_num(row_n=3, row_step=2, col_n=2, number_of_columns=5, number_of_game=1, player=32, data=data) # рисует номера встреч 1-32
-        data[60][8] = str((number_of_game - 3) * -1)  # номера проигравших 29
-        data[62][8] = str((number_of_game - 2) * -1)  # номера проигравших 30
-        data[55][10] = str((number_of_game - 1) * -1)  # номер проигравшего финал (-31)
-        data[61][10] = str(number_of_game)  # создание номеров встреч 32
-        data[66][10] = str((number_of_game) * -1)  # номер проигравшего финал (-32)
 
-        # #========= расписание ===========
-        # self.schedule_data(data, fin)
+        # вcтречи 29-30 (полуфиналы) есть всегда — их проигравшие идут
+        # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+        data[60][8] = str((number_of_game - 3) * -1)   # проигравший 29
+        data[62][8] = str((number_of_game - 2) * -1)   # проигравший 30
+
+        if play_third:
+            # 3-е место разыгрывается — создаём матч 32 (за 3-4)
+            data[55][10] = str((number_of_game - 1) * -1)  # -31
+            data[61][10] = str(number_of_game)             # 32
+            data[66][10] = str((number_of_game) * -1)      # -32
+            # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+            data[60][8] = str((number_of_game - 3) * -1)   # проигравший 29
+            data[62][8] = str((number_of_game - 2) * -1)   # проигравший 30
+        else:
+            # 3-е место не разыгрывается — матч 32 не создаём
+            data[55][10] = ""
+            data[61][10] = ""
+            data[66][10] = ""
+            # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+            data[60][8] = ""   # проигравший 29
+            data[62][8] = ""   # проигравший 30
+
+        # data[60][8] = str((number_of_game - 3) * -1)  # номера проигравших 29
+        # data[62][8] = str((number_of_game - 2) * -1)  # номера проигравших 30
+        # data[55][10] = str((number_of_game - 1) * -1)  # номер проигравшего финал (-31)
+        # data[61][10] = str(number_of_game)  # создание номеров встреч 32
+        # data[66][10] = str((number_of_game) * -1)  # номер проигравшего финал (-32)
+
         #========= расписание ===========
         style_color_schedule = self.schedule_data(data, fin)
         # ============= данные игроков и встреч и размещение по сетке =============
@@ -22987,19 +23023,37 @@ class MainWindow(QMainWindow):
         for l in range(34, 57, 22):
             fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 1-2 места
             style.append(fn)
-        for l in range(62, 68, 5):
-            fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 3-4 места
-            style.append(fn)
-        for l in range(61, 64, 2):
-            fn = ('LINEABOVE', (9, l), (10, l), 1, colors.darkblue)  # рисует линии встреч за -29 -30
-            style.append(fn)
-        fn = ('BOX', (10, 61), (10, 62), 1, colors.darkblue)
-        style.append(fn) 
-        fn = ('SPAN', (10, 61), (10, 62))  # встреча 32
-        style.append(fn)       
-        fn = ('BACKGROUND', (10, 61), (10, 62), colors.lightyellow)  # встречи 32 за 3-4 место
-        style.append(fn)
 
+        # # for l in range(62, 68, 5):
+        # #     fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 3-4 места
+        # #     style.append(fn)
+        # for l in range(61, 64, 2):
+        #     fn = ('LINEABOVE', (9, l), (10, l), 1, colors.darkblue)  # рисует линии встреч за -29 -30
+        #     style.append(fn)
+        # fn = ('BOX', (10, 61), (10, 62), 1, colors.darkblue)
+        # style.append(fn) 
+        # fn = ('SPAN', (10, 61), (10, 62))  # встреча 32
+        # style.append(fn)       
+        # fn = ('BACKGROUND', (10, 61), (10, 62), colors.lightyellow)  # встречи 32 за 3-4 место
+        # style.append(fn)
+
+        # финальные линии (встреча 31, за 1-2 место) — рисуем всегда
+        for l in range(62, 68, 5):
+            fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)
+            style.append(fn)
+
+        if play_third:
+            # линии встречи 32 (за 3-4)
+            for l in range(61, 64, 2):
+                fn = ('LINEABOVE', (9, l), (10, l), 1, colors.darkblue)
+                style.append(fn)
+            fn = ('BOX', (10, 61), (10, 62), 1, colors.darkblue)
+            style.append(fn)
+            fn = ('SPAN', (10, 61), (10, 62))
+            style.append(fn)
+            fn = ('BACKGROUND', (10, 61), (10, 62), colors.lightyellow)
+            style.append(fn)
+# ====================================
         for i in range(0, 11, 2):
             fn = ('TEXTCOLOR', (i + 1, 0), (i + 1, strok), colors.black)  # цвет шрифта игроков
             style.append(fn)
