@@ -2738,7 +2738,7 @@ class MainWindow(QMainWindow):
 
     def save_doubles_result(self):
         """Сохранение результата парного матча"""
-
+        import math
         # ПРОВЕРКА 1: Существует ли выбранный матч
         if not hasattr(self, 'current_doubles_result_id') or not self.current_doubles_result_id:
             QMessageBox.warning(self, "Ошибка", "Нет выбранного матча. Дважды кликните на матч в таблице результатов.")
@@ -3021,7 +3021,7 @@ class MainWindow(QMainWindow):
                 system_obj = System.get_or_none(System.id == match.system_id)
                 if system_obj and "Олимпийская" in (system_obj.type_table or ""):
 
-                    bracket_size = self.parent.get_olympic_bracket_size(
+                    bracket_size = self.get_olympic_bracket_size(
                         system_obj.max_player
                     )
 
@@ -3255,10 +3255,6 @@ class MainWindow(QMainWindow):
                     self.doubles_p1_name.setStyleSheet("background-color: #90EE90; font-weight: bold;")
                 if hasattr(self, 'doubles_total_score2'):
                     self.doubles_total_score2.setStyleSheet("")
-                # Переносим фокус на кнопку "Сохранить"
-                # QTimer.singleShot(100, lambda: self._focus_doubles_save_button())
-                self._focus_doubles_save_button()
-                self.save_doubles_result()
             elif wins_p2 >= required_wins:
                 if hasattr(self, 'doubles_total_score2'):
                     self.doubles_total_score2.setStyleSheet("background-color: #90EE90; font-weight: bold;")
@@ -3266,9 +3262,6 @@ class MainWindow(QMainWindow):
                     self.doubles_p2_name.setStyleSheet("background-color: #90EE90; font-weight: bold;")
                 if hasattr(self, 'doubles_total_score1'):
                     self.doubles_total_score1.setStyleSheet("")
-                # QTimer.singleShot(100, lambda: self._focus_doubles_save_button())
-                self._focus_doubles_save_button()
-                self.save_doubles_result()
             else:
                 if hasattr(self, 'doubles_total_score1'):
                     self.doubles_total_score1.setStyleSheet("")
@@ -3760,6 +3753,7 @@ class MainWindow(QMainWindow):
 
         # ---------- 3) Матч завершён? ----------
         if wins_p1 >= required_wins or wins_p2 >= required_wins:
+
             # Кто-то набрал 3 победы — сохраняем независимо от того,
             # где сейчас курсор
             self.doubles_save_btn.setFocus()
