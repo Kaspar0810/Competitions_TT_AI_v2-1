@@ -2395,41 +2395,6 @@ class MainWindow(QMainWindow):
             self.double_players_model.set_highlight_rows([])
         QMessageBox.information(self, "Сортировка", "Список пар отсортирован по рейтингу")
 
-    # def on_doubles_mode_changed(self, button):
-    #     """Переключение между списком пар и результатами"""
-    #     if button == self.radio_list_mode:
-    #         self.doubles_mode = "list"
-    #         # Форма — страница списков
-    #         self.doubles_forms_stack.setCurrentIndex(0)
-    #         # Таблица в table_container — список пар
-    #         self.table_container.setCurrentWidget(self.doubles_table_view)
-    #         self.table_header.setText("🤝 Список пар")
-    #         self.table_header.setStyleSheet("""
-    #             background-color: #4CAF50;
-    #             color: white;
-    #             padding: 6px;
-    #             font-weight: bold;
-    #             font-size: 11px;
-    #             border-radius: 3px;
-    #         """)
-    #         self.load_doubles_for_title()
-    #     else:
-    #         self.doubles_mode = "results"
-    #         # Форма — страница результатов
-    #         self.doubles_forms_stack.setCurrentIndex(1)
-    #         # Таблица в table_container — результаты
-    #         self.table_container.setCurrentWidget(self.doubles_results_table_view)
-    #         self.table_header.setText("📊 Результаты парных матчей")
-    #         self.table_header.setStyleSheet("""
-    #             background-color: #FF9800;
-    #             color: white;
-    #             padding: 6px;
-    #             font-weight: bold;
-    #             font-size: 11px;
-    #             border-radius: 3px;
-    #         """)
-    #         self.load_doubles_results()
-
     def on_doubles_mode_changed(self, button):
         """Переключение между списком пар и результатами."""
         if button == self.radio_list_mode:
@@ -2461,6 +2426,8 @@ class MainWindow(QMainWindow):
             self.refresh_doubles_stage_filter()
             self.load_doubles_results()
 
+        QTimer.singleShot(0, self._sync_no_third_place_pairs_cb)
+
     def on_double_vid_changed(self):
         """Обработка смены вида пары"""
         self.update_double_player_completers()
@@ -2477,6 +2444,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'double_region_edit'):
             self.double_region_edit.clear()
 
+        QTimer.singleShot(0, self._sync_no_third_place_pairs_cb)
+
     def load_doubles_matches_for_results(self):
         """Загрузка пар для выбора в результатах"""
         self.doubles_match_combo.clear()
@@ -2485,79 +2454,6 @@ class MainWindow(QMainWindow):
         query = Players_double.select().where(Players_double.title_id == self.current_title_id)
         for double in query:
             self.doubles_match_combo.addItem(f"{double.player_1} / {double.player_2}", double.id)
-
-    # def load_doubles_results(self):
-    #     """Загрузка результатов парных матчей из таблицы Result"""
-    #     if not self.current_title_id:
-    #         self.doubles_results_model.setData([])
-    #         return
-
-    #     try:
-    #         # Определяем вид пары
-    #         vid_map = {"мужские": "man", "женские": "woman", "смешанные": "mix"}
-    #         vid_text = self.double_vid_combo.currentText() if hasattr(self, 'double_vid_combo') else "мужские"
-    #         vid = vid_map.get(vid_text, "man")
-
-    #         # Получаем все парные этапы для текущего соревнования и вида
-    #         stages = System.select().where(
-    #             (System.title_id == self.current_title_id) &
-    #             (System.sex == vid) &
-    #             (System.stage.contains("пары"))
-    #         ).order_by(System.id)
-
-    #         if stages.count() == 0:
-    #             self.doubles_results_model.setData([])
-    #             return
-
-    #         results_data = []
-    #         for stage in stages:
-    #             stage_name = stage.stage
-
-    #             # Получаем записи Result для этого этапа
-    #             results = Result.select().where(
-    #                 (Result.title_id == self.current_title_id) &
-    #                 (Result.system_id == stage.id)
-    #             ).order_by(Result.round, Result.tours)
-
-    #             for res in results:
-    #                 # Номер встречи (tours) — например, "1-2" или "3"
-    #                 tour = res.tours or ""
-
-    #                 # Группа — для пар обычно одна группа
-    #                 group = res.number_group or stage_name
-
-    #                 results_data.append({
-    #                     'id': res.id,
-    #                     'group': group,
-    #                     'tour': tour,
-    #                     'pair1': res.player1 or "",
-    #                     'pair2': res.player2 or "",
-    #                     'winner': res.winner or "",
-    #                     'score_in_game': res.score_in_game or "",     # общий счёт (например, 3:1)
-    #                     'score_match': res.score_win or "",           # счёт по партиям (например, "5,-7,8,-9,6")
-    #                     'stage': stage_name
-    #                 })
-
-    #         # Сортировка по этапу, туру
-    #         def sort_key(x):
-    #             tour_num = 0
-    #             if x['tour']:
-    #                 try:
-    #                     # Если "1-2" — берём первое число
-    #                     tour_num = int(x['tour'].split('-')[0])
-    #                 except:
-    #                     tour_num = 0
-    #             return (x['stage'], tour_num)
-
-    #         results_data.sort(key=sort_key)
-
-    #         self.doubles_results_model.setData(results_data)
-
-    #     except Exception as e:
-    #         print(f"Ошибка загрузки результатов пар: {e}")
-    #         import traceback
-    #         traceback.print_exc()
-    #         self.doubles_results_model.setData([])
 
     def load_doubles_results(self):
         """Загрузка результатов парных матчей из Result с учётом фильтров."""
@@ -3063,7 +2959,6 @@ class MainWindow(QMainWindow):
                             pair.save()
 
                     if is_final:
-                        # Победитель — 1-е, проигравший — 2-е
                         _set_pair_mesto(winner_name, 1)
                         _set_pair_mesto(loser_name, 2)
                     else:
@@ -3071,78 +2966,12 @@ class MainWindow(QMainWindow):
                             bracket_size, eliminated_round,
                             play_third_place=play_third
                         )
+                        _set_pair_mesto(loser_name, min_place)
                         # Если полуфинал и 3-е не разыгрывается —
                         # оба полуфиналиста получают «3»
-                        _set_pair_mesto(loser_name, min_place)
-
+                        
             except Exception as e:
                 print(f"Не удалось записать место пары: {e}")            
-            # try:
-            #     # Определяем тип сетки и раунд вылета
-            #     system_obj = System.get_or_none(System.id == match.system_id)
-            #     if system_obj and "Олимпийская" in (system_obj.type_table or ""):
-
-            #         bracket_size = self.get_olympic_bracket_size(
-            #             system_obj.max_player
-            #         )
-
-            #         # Номер раунда, в котором проиграл loser_name
-            #         # (по полю round в Result — если он заполнен;
-            #         #  иначе — по номеру встречи match.tours)
-            #         eliminated_round = None
-            #         if match.round and str(match.round).isdigit():
-            #             eliminated_round = int(match.round)
-            #         else:
-            #             # fallback: определяем раунд по номеру встречи
-            #             # для стандартной сетки
-            #             try:
-            #                 tours_num = int(match.tours)
-            #                 # в 1-м раунде номера 1..bracket_size/2
-            #                 # во 2-м    bracket_size/2+1..bracket_size/2+bracket_size/4
-            #                 # и т.д.
-            #                 rounds_played = 0
-            #                 cum = 0
-            #                 r = 1
-            #                 while cum < tours_num and r <= 10:
-            #                     cum += bracket_size // (2 ** r)
-            #                     rounds_played = r
-            #                     r += 1
-            #                 eliminated_round = rounds_played
-            #             except Exception:
-            #                 eliminated_round = 1
-
-            #         min_place, max_place = self._doubles_round_places(
-            #             bracket_size, eliminated_round
-            #         )
-
-            #         # Обновляем mesto у проигравшей пары
-            #         # (для случая X — mesto не пишем)
-            #         if loser_name and loser_name != "X":
-            #             # Ищем пару по para_full
-            #             loser_pair = Players_double.get_or_none(
-            #                 (Players_double.title_id == self.current_title_id) &
-            #                 (Players_double.double_vid == system_obj.sex) &
-            #                 (Players_double.para_full == loser_name)
-            #             )
-            #             if loser_pair:
-            #                 loser_pair.mesto = min_place
-            #                 loser_pair.save()
-
-            #         # Победитель финала получает 1-е место
-            #         if eliminated_round == int(math.log2(bracket_size)) \
-            #                 if bracket_size >= 2 else False:
-            #             # это финальный раунд — победителю 1-е
-            #             if winner_name and winner_name != "X":
-            #                 winner_pair = Players_double.get_or_none(
-            #                     (Players_double.title_id == self.current_title_id) &
-            #                     (Players_double.double_vid == system_obj.sex) &
-            #                     (Players_double.para_full == winner_name)
-            #                 )
-            #                 if winner_pair:
-            #                     winner_pair.mesto = 1
-            #                     winner_pair.save()
-            # except Exception as e:
-            #     print(f"Не удалось записать место пары: {e}")
 
             # --- Уведомление ---
             QMessageBox.information(self, "Успех",
@@ -3180,20 +3009,20 @@ class MainWindow(QMainWindow):
 
     def _system_has_third_place_match(self, system):
         """
-        Проверяет, разыгрывается ли матч за 3-е место в этой системе.
-        Смотрим type_table: «за 1-3 место» → 3-е разыгрывается;
-        «с розыгрышем всех мест» / «минус 2» — тоже (там все места).
-        Только чистое «выбывание после одного поражения» (если у вас есть
-        отдельный тип) — не разыгрывает.
+        Проверяет, разыгрывается ли матч за 3-е место.
+        Смотрим type_table и no_game.
         """
+        if not system:
+            return False
+        # Если чекбокс «3-е место не разыгрывается» отмечен — не разыгрывается
+        if (system.no_game or "").strip() == "3":
+            return False
         tt = (system.type_table or "").lower()
         if "за 1-3" in tt or "1-3" in tt:
             return True
         if "с розыгрышем всех" in tt or "minus 2" in tt or "минус 2" in tt:
             return True
-        # «Олимпийская (минус 2)» / «Олимпийская (с розыгрышем всех мест)» — тоже True.
-        # Если у вас есть отдельный тип «простое выбывание» — он вернёт False.
-        return False   
+        return False
 # =============================
     def clear_doubles_result_form(self):
         """Очистка формы ввода результата"""
@@ -3431,6 +3260,23 @@ class MainWindow(QMainWindow):
             """)
             status_row.addWidget(b)
         df_layout.addLayout(status_row)
+
+        # --- «3-е место не разыгрывается» (для пар) ---
+        sep_line = QFrame()
+        sep_line.setFrameShape(QFrame.HLine)
+        sep_line.setStyleSheet("background-color:#ccc; max-height:1px; margin:6px 0;")
+        df_layout.addWidget(sep_line)
+
+        self.no_third_place_pairs_cb = QCheckBox("3-е место не разыгрывается")
+        self.no_third_place_pairs_cb.setStyleSheet("font-size: 11px; margin-top: 2px;")
+        self.no_third_place_pairs_cb.setToolTip(
+            "Если отмечено — проигравшие в полуфиналах пар "
+            "делят 3-е место (матч за 3-4 место не планируется)"
+        )
+        self.no_third_place_pairs_cb.stateChanged.connect(
+            self.on_no_third_place_pairs_changed
+        )
+        df_layout.addWidget(self.no_third_place_pairs_cb)
 
         # --- Сброс фильтров ---
         reset_btn = QPushButton("🔄 Сбросить фильтры")
@@ -4087,6 +3933,16 @@ class MainWindow(QMainWindow):
         )
         self.parties_count_combo.currentTextChanged.connect(self.on_parties_count_changed)
         info_layout.addWidget(self.parties_count_combo)
+
+        # --- «3-е место не разыгрывается» (для личных) ---
+        self.no_third_place_cb = QCheckBox("3-е место не разыгрывается")
+        self.no_third_place_cb.setStyleSheet("font-size: 12px; margin-left: 10px;")
+        self.no_third_place_cb.setToolTip(
+            "Если отмечено — проигравшие в полуфиналах делят 3-е место "
+            "(матч за 3-4 место не планируется)"
+        )
+        self.no_third_place_cb.stateChanged.connect(self.on_no_third_place_changed)
+        info_layout.addWidget(self.no_third_place_cb)
         # ========================================
 
         info_layout.addStretch()
@@ -4322,6 +4178,9 @@ class MainWindow(QMainWindow):
         self.current_matches = []
         self.current_match_index = 0
         
+        # применить состояние чекбокса из текущей системы (если есть)
+        QTimer.singleShot(100, self._sync_no_third_place_cb)
+
         return tab_widget
     
     def create_rating_tab(self):
@@ -4821,7 +4680,6 @@ class MainWindow(QMainWindow):
             edit.returnPressed.connect(lambda col=i: self.move_to_next_doubles_field(2, col))
             score_layout.addWidget(edit, 2, 3 + i)
             self.doubles_score_edits_p2[i] = edit
-    # =================
 
         # Кнопки
         self.doubles_save_btn = QPushButton("💾 Сохранить")
@@ -4863,6 +4721,141 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.doubles_forms_stack)
 
         return tab_widget
+
+# ===================== 3-е место не разыгрывается =====================
+
+    def _current_systems_for_results(self):
+        """Возвращает список System для текущего этапа (личные и пары)."""
+        systems = []
+        try:
+            if hasattr(self, 'current_stage') and self.current_stage:
+                if self.doubles_mode == "results" \
+                        if hasattr(self, 'doubles_mode') else False:
+                    s = System.get_or_none(
+                        (System.title_id == self.current_title_id) &
+                        (System.sex == self._current_doubles_vid()) &
+                        (System.stage.in_(
+                            ["Мужские пары", "Женские пары", "Смешанные пары"]
+                        ))
+                    )
+                    if s:
+                        systems.append(s)
+                else:
+                    s = System.get_or_none(
+                        (System.title_id == self.current_title_id) &
+                        (System.sex == self.current_sex) &
+                        (System.stage == self.current_stage)
+                    )
+                    if s:
+                        systems.append(s)
+        except Exception as e:
+            print(f"_current_systems_for_results: {e}")
+        return systems
+
+
+    def _current_doubles_vid(self):
+        """Возвращает вид пары (man/woman/mix) из комбобокса."""
+        vid_map = {"мужские": "man", "женские": "woman", "смешанные": "mix"}
+        vid_text = (
+            self.double_vid_combo.currentText()
+            if hasattr(self, 'double_vid_combo') else "мужские"
+        )
+        return vid_map.get(vid_text, "man")
+
+
+    def _sync_no_third_place_cb(self):
+        """Синхронизирует чекбокс «3-е место не разыгрывается» (личные) с System.no_game."""
+        if not hasattr(self, 'no_third_place_cb'):
+            return
+        if not self.current_title_id or not getattr(self, 'current_stage', None):
+            return
+        try:
+            s = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == self.current_sex) &
+                (System.stage == self.current_stage)
+            )
+            if not s:
+                return
+            flag = (s.no_game or "").strip()
+            self.no_third_place_cb.blockSignals(True)
+            self.no_third_place_cb.setChecked(flag == "3")
+            self.no_third_place_cb.blockSignals(False)
+        except Exception as e:
+            print(f"_sync_no_third_place_cb: {e}")
+
+
+    def _sync_no_third_place_pairs_cb(self):
+        """Синхронизирует чекбокс «3-е место не разыгрывается» (пары) с System.no_game."""
+        if not hasattr(self, 'no_third_place_pairs_cb'):
+            return
+        if not self.current_title_id:
+            return
+        try:
+            vid = self._current_doubles_vid()
+            s = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == vid) &
+                (System.stage.in_(
+                    ["Мужские пары", "Женские пары", "Смешанные пары"]
+                ))
+            )
+            if not s:
+                return
+            flag = (s.no_game or "").strip()
+            self.no_third_place_pairs_cb.blockSignals(True)
+            self.no_third_place_pairs_cb.setChecked(flag == "3")
+            self.no_third_place_pairs_cb.blockSignals(False)
+        except Exception as e:
+            print(f"_sync_no_third_place_pairs_cb: {e}")
+
+
+    def on_no_third_place_changed(self, state):
+        """Обработка чекбокса «3-е место не разыгрывается» (личные)."""
+        if not self.current_title_id or not getattr(self, 'current_stage', None):
+            return
+        try:
+            s = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == self.current_sex) &
+                (System.stage == self.current_stage)
+            )
+            if not s:
+                return
+            s.no_game = "3" if state == Qt.Checked else ""
+            s.save()
+            self.status_label.setText(
+                "3-е место не разыгрывается" if state == Qt.Checked
+                else "3-е место разыгрывается (матч за 3-4 место)"
+            )
+        except Exception as e:
+            print(f"on_no_third_place_changed: {e}")
+
+
+    def on_no_third_place_pairs_changed(self, state):
+        """Обработка чекбокса «3-е место не разыгрывается» (пары)."""
+        if not self.current_title_id:
+            return
+        try:
+            vid = self._current_doubles_vid()
+            s = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == vid) &
+                (System.stage.in_(
+                    ["Мужские пары", "Женские пары", "Смешанные пары"]
+                ))
+            )
+            if not s:
+                return
+            s.no_game = "3" if state == Qt.Checked else ""
+            s.save()
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(
+                    "3-е место (пары) не разыгрывается" if state == Qt.Checked
+                    else "3-е место (пары) разыгрывается"
+                )
+        except Exception as e:
+            print(f"on_no_third_place_pairs_changed: {e}")
 
     def create_participants_tab(self):
         """Вкладка участников - с поиском по спискам и автодополнением"""
@@ -5478,43 +5471,13 @@ class MainWindow(QMainWindow):
                 
             # Обновляем таблицу
             self.load_results_table_for_stage(stage_name)
-            
+
+            # синхронизировать чекбокс «3-е место не разыгрывается»
+            QTimer.singleShot(0, self._sync_no_third_place_cb)
+
         except Exception as e:
             print(f"Ошибка загрузки матчей: {e}")
 
-    # def on_schedule_stage_changed(self):
-    #     stage_name = self.schedule_stage_combo.currentText()
-
-    #     if not stage_name:
-    #         return
-
-    #     # Синхронизируем с бегунками
-    #     self.sync_schedule_stage_to_runner(stage_name)
-
-    #     system = System.get_or_none(
-    #         (System.title_id == self.current_title_id) &
-    #         (System.sex == self.current_sex) &
-    #         (System.stage == stage_name)
-    #     )
-    #     if not system:
-    #         self.status_label.setText(f"❌ Система для этапа '{stage_name}' не найдена")
-    #         self.schedule_table.setRowCount(0)
-    #         return
-
-    #     # Проверку на олимпийскую систему убираем – загружаем все этапы
-    #     self.max_tables = self.get_competition_tables()
-
-    #     self.load_schedule_matches(stage_name)
-    #     # Сбрасываем фильтры (показываем все строки)
-    #     for row in range(self.schedule_table.rowCount()):
-    #         self.schedule_table.setRowHidden(row, False)
-    #         # Обновляем комбобокс стадий
-    #         self.update_stage_filter_combo()
-    #         # Обновляем фильтры даты и времени
-    #         self.update_schedule_filter_combos()
-    #         # Сбрасываем скрытие строк
-    #         for row in range(self.schedule_table.rowCount()):
-    #             self.schedule_table.setRowHidden(row, False)
     def on_schedule_stage_changed(self):
         stage_name = self.schedule_stage_combo.currentText()
         if not stage_name:
@@ -8028,8 +7991,6 @@ class MainWindow(QMainWindow):
 
         elif index == 3:  # Пары
 
-            # self.update_left_panel_for_tab(index)
-
             # Восстанавливаем режим
             if hasattr(self, 'doubles_mode') and self.doubles_mode == "results":
                 self.doubles_forms_stack.setCurrentIndex(1)
@@ -8056,8 +8017,12 @@ class MainWindow(QMainWindow):
                     font-size: 11px;
                     border-radius: 3px;
                 """)
+
                 if self.current_title_id:
                     self.load_doubles_for_title()
+
+            # синхронизировать чекбокс «3-е место не разыгрывается» с System.no_game
+            QTimer.singleShot(0, self._sync_no_third_place_pairs_cb)
 
         elif index == 6:  # Рейтинг
             self.table_header.setText("⭐ Рейтинг участников")
@@ -26347,6 +26312,9 @@ class MainWindow(QMainWindow):
                 self.load_results_table_for_stage(stage_name)
                 self.tab_widget.setCurrentIndex(5) 
                 self.update_filter_combos(stage_name)              
+
+        # синхронизировать чекбокс «3-е место не разыгрывается»
+        QTimer.singleShot(0, self._sync_no_third_place_cb)
 
     def refresh_results_data(self):
         """Обновление данных результатов"""
