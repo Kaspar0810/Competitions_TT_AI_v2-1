@@ -2881,7 +2881,9 @@ class MainWindow(QMainWindow):
                     number_game = 0
 
                 if number_game > 0:
-                    snoska = self.number_of_game(number_game, type_table, max_pl)
+                    # snoska = self.number_of_game(number_game, type_table, max_pl)
+                    snoska = self.number_of_game(number_game, type_table, max_pl,
+                             no_game=(system.no_game or ""))
                     if snoska and snoska[0] != 0:
                         with db.atomic():
                             # Победитель
@@ -2973,6 +2975,17 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 print(f"Не удалось записать место пары: {e}")            
 
+            # ---- 3-е место для проигравшего полуфинала (пары) ----
+            if type_table == "Олимпийская (за 1-3 место)" \
+                    and (system.no_game or "") == "3":
+                bracket_size = self.get_olympic_bracket_size(max_pl)
+                try:
+                    num_game_int = int(match.tours)
+                except (TypeError, ValueError):
+                    num_game_int = 0
+                self._record_third_place_losers(
+                    system, bracket_size, num_game_int, loser_name
+                )
             # --- Уведомление ---
             QMessageBox.information(self, "Успех",
                                     f"Результат сохранён!\n"
@@ -3006,6 +3019,76 @@ class MainWindow(QMainWindow):
             import traceback
             traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить результат: {str(e)}") 
+
+    def _record_third_place_losers(self, system, bracket_size,
+                                match_num, loser_name):
+        """
+        Записывает 3-е место проигравшему полуфинала при
+        «3-е место не разыгрывается».
+
+        Вызывать только когда system.no_game == "3" и match_num — полуфинал.
+        """
+        if not loser_name or loser_name == "X":
+            return
+
+        semifinal_matches = []
+        if bracket_size >= 32:
+            semifinal_matches = [29, 30]
+        elif bracket_size == 16:
+            semifinal_matches = [13, 14]
+        elif bracket_size == 8:
+            semifinal_matches = [5, 6]
+
+        if match_num not in semifinal_matches:
+            return
+
+        is_pairs = (system.sex in ("man", "woman", "mix")
+                    and "пары" in (system.stage or "").lower())
+
+        try:
+            if is_pairs:
+                # Пары: Players_double + Choice_double_player
+                pair = Players_double.get_or_none(
+                    (Players_double.title_id == self.current_title_id) &
+                    (Players_double.double_vid == system.sex) &
+                    (Players_double.para_full == loser_name)
+                )
+                if pair:
+                    pair.mesto = 3
+                    pair.save()
+
+                    try:
+                        cdp = Choice_double_player.get_or_none(
+                            (Choice_double_player.title_id == self.current_title_id) &
+                            (Choice_double_player.player_double_id == pair.id)
+                        )
+                        if cdp:
+                            cdp.mesto_final = 3
+                            cdp.save()
+                    except Exception as e:
+                        print(f"Choice_double_player: {e}")
+            else:
+                # Личные: Player + Choice
+                player_obj = Player.get_or_none(
+                    (Player.title_id == self.current_title_id) &
+                    (Player.fio_city == loser_name)
+                )
+                if player_obj:
+                    player_obj.mesto = 3
+                    player_obj.save()
+
+                    try:
+                        choice = Choice.get_or_none(
+                            (Choice.title_id == self.current_title_id) &
+                            (Choice.player_choice_id == player_obj.id)
+                        )
+                        if choice:
+                            choice.mesto_final = 3
+                            choice.save()
+                    except Exception as e:
+                        print(f"Choice: {e}")
+        except Exception as e:
+            print(f"_record_third_place_losers: {e}")
 
     def _system_has_third_place_match(self, system):
         """
@@ -6815,7 +6898,9 @@ class MainWindow(QMainWindow):
             # Обновляем сетку (для олимпийской системы)
             if type_table != "Круговая":
                 number_game = int(match.tours)
-                snoska = self.number_of_game(number_game, type_table, max_pl)
+                # snoska = self.number_of_game(number_game, type_table, max_pl)
+                snoska = self.number_of_game(number_game, type_table, max_pl,
+                             no_game=(system.no_game or ""))
                 if snoska and snoska[0] != 0:
                     with db.atomic():
                         # Победитель
@@ -6842,7 +6927,18 @@ class MainWindow(QMainWindow):
                             else:
                                 res_id_lose.player2 = loser_name
                             res_id_lose.save()
-    
+
+        # ---- 3-е место для проигравшего полуфинала ----
+                if type_table == "Олимпийская (за 1-3 место)" \
+                        and (system.no_game or "") == "3":
+                    bracket_size = self.get_olympic_bracket_size(max_pl)
+                    try:
+                        num_game_int = int(match.tours)
+                    except (TypeError, ValueError):
+                        num_game_int = 0
+                    self._record_third_place_losers(
+                        system, bracket_size, num_game_int, loser_name
+                    )
             # Показываем сообщение
             QMessageBox.information(self, "Успех", 
                                 f"Результат сохранен!\n"
@@ -20415,7 +20511,6 @@ class MainWindow(QMainWindow):
                         data[row_los][col_los + 1] = los
                 return tds
 # ========= вариант AI
-
     def write_in_setka(self, data, stage, first_mesto, table, posev_data):
         """
         Заполняет олимпийскую сетку данными из таблицы Result.
@@ -20437,7 +20532,29 @@ class MainWindow(QMainWindow):
         else:  
             player = Player.select().where((Player.title_id == self.current_title_id) & (Player.sex == self.current_sex))
     # ==== словарь или список номер встреч за места
-        place_list = self.number_match_net_for_place(table)  
+        place_list = self.number_match_net_for_place(table) 
+
+        # Определяем no_game и полуфиналы для сетки
+        no_game = ""
+        try:
+            system_obj = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == self.current_sex) &
+                (System.stage == stage)
+            )
+            if system_obj:
+                no_game = (system_obj.no_game or "").strip()
+        except Exception:
+            pass
+
+        semifinal_matches = []
+        if no_game == "3":
+            if table in ("setka_32", "setka_32_full", "setka_32_2"):
+                semifinal_matches = [29, 30]
+            elif table in ("setka_16", "setka_16_full", "setka_16_2"):
+                semifinal_matches = [13, 14]
+            elif table in ("setka_8", "setka_8_full", "setka_8_2"):
+                semifinal_matches = [5, 6] 
     # ---------- 0. Заполняем нулевой столбец игроками первого посева ----------
         ind = 0
         for row in data:
@@ -20512,6 +20629,17 @@ class MainWindow(QMainWindow):
                         data[row_idx + 1][col_idx + 1] = score_str
 
                 # 3.3. Проигравший — в ячейку с -match_num
+                if no_game == "3": # сразу пишет фамилии игроков проигравших в полуфинале
+                    if table in ("setka_32", "setka_32_full"):
+                        if match_num in semifinal_matches:
+                            loser_cells = {-29:[(61, 10)], -30:[(66, 10)]}
+                    elif table in ("setka_16", "setka_16_full"):
+                        if match_num in semifinal_matches:
+                            loser_cells = {-13:[(29, 9)], -14:[(31, 9)]}
+                    elif table in ("setka_8", "setka_8_full"):
+                        if match_num in semifinal_matches:
+                            loser_cells = {-5:[(16, 7)], -6:[(18, 7)]}
+
                 for l_row, l_col in loser_cells.get(-match_num, []):
                     if l_col + 1 < len(data[l_row]):
                         if table == "setka_32_2" and match_num == 60:
@@ -20548,6 +20676,29 @@ class MainWindow(QMainWindow):
 
                         k += 1  
 
+                # ---- 3-е место для проигравших полуфиналов (no_game == "3") ----
+                if no_game == "3" and match_num in semifinal_matches and loser_name:
+                    player_id = next(
+                        (info["player_id"] for info in posev_data.values()
+                         if info.get("name") == loser_name
+                         or info.get("name_city") == loser_name),
+                        None
+                    )
+                    if player_id:
+                        try:
+                            choice = Choice.get_or_none(
+                                (Choice.title_id == self.current_title_id) &
+                                (Choice.player_choice == player_id)
+                            )
+                            if choice:
+                                choice.mesto_final = 3
+                                choice.save()
+                            player_obj = Player.get_or_none(Player.id == player_id)
+                            if player_obj:
+                                player_obj.mesto = 3
+                                player_obj.save()
+                        except Exception as e:
+                            print(f"write_in_setka: 3rd place: {e}")
         return data
 
     def build_place_matches(self, first_mesto, place_list):
@@ -20609,9 +20760,25 @@ class MainWindow(QMainWindow):
 
         return winner_name, loser_name, score_str
 
-    def number_match_net_for_place(self, table):
+    def number_match_net_for_place(self, table, no_game=""):
         """список номерв встреч за места в зависимости от сетки"""
         place_list = []
+
+        if table == "setka_32":
+            if no_game == "3": # нет игры за 3-е место
+                place_list = [31]        # только финал
+            else:
+                place_list = [31, 32]
+        elif table == "setka_16":
+            if no_game == "3":
+                place_list = [15]
+            else:
+                place_list = [15, 16]
+        elif table == "setka_8":
+            if no_game == "3":
+                place_list = [7]
+            else:
+                place_list = [7, 8]
 
         if table == "setka_8_full":
             place_list = [7, 8, 11, 12]
@@ -20622,14 +20789,20 @@ class MainWindow(QMainWindow):
         elif table == "setka_16_full":
             place_list = [15, 16, 19, 20, 27, 28, 31, 32]
         elif table == "setka_16":
-            place_list = [15, 16]
+            if no_game == "3":
+                place_list = [15]
+            else:
+                place_list = [15, 16]
         elif table == "setka_16_2":
             place_list =[15, 28, 29, 30, 33, 34, 37, 38]
         elif table == "setka_32_full":
             place_list = [31, 32, 35, 36, 43, 44, 47, 48,
                            63, 64, 67, 68, 75, 76, 79, 80]
         elif table == "setka_32":
-            place_list = [31, 32]
+            if no_game == "3": # нет игры за 3-е место
+                place_list = [31]        # только финал
+            else:
+                place_list = [31, 32]
         elif table == "setka_32_2":
             place_list = [31, 60, 61, 62, 65, 66, 69, 70,
                             77, 78, 81, 82, 89, 90, 93, 94]
@@ -21115,10 +21288,10 @@ class MainWindow(QMainWindow):
             p_data.clear()
         return posev_data
 
-    def number_of_game(self, number_game, vid_setki, max_pl):
+    def _number_of_game(self, number_game, vid_setki, max_pl):
         """определяет куда записывать победителя и проигравшего по сноске в сетке, номера встреч"""
         snoska = []
-        flag_full = 0
+        flag_full = 0 # полная сетка
         if vid_setki == 'Олимпийская (с розыгрышем всех мест)':
             if max_pl == 8:
                 dict_winner = {1:5, 2:5, 3:6, 4:6, 5:7, 6:7, 9:11, 10:11}
@@ -21155,14 +21328,9 @@ class MainWindow(QMainWindow):
             elif max_pl == 32:
                 dict_winner = {1: 17, 2: 17, 3: 18, 4: 18, 5: 19, 6: 19, 7: 20, 8: 20, 9: 21, 10: 21, 11: 22, 12: 22, 13: 23, 14: 23,
                     15: 24, 16: 24, 17: 25, 18: 25, 19: 26, 20: 26, 21: 27, 22: 27, 23: 28, 24: 28, 25: 29, 26: 29, 27: 30, 28: 30, 
-                    29: 31, 30: 31, 33: 35, 34: 35, 37: 41, 38: 41, 39: 42, 40: 42, 41: 43, 42: 43, 45: 47, 46: 47, 49: 57, 50: 57,
-                    51: 58, 52: 58, 53: 59, 54: 59, 55: 60, 56: 60, 57: 61, 58: 61, 59: 62, 60: 62, 61: 63, 62: 63, 65: 67, 66: 67,
-                    69: 73, 70: 73, 71: 74, 72: 74, 73: 75, 74: 75, 77: 79, 78: 79}
-                dict_loser = {1: 49, 2: 49, 3: 50, 4: 50, 5: 51, 6: 51, 7: 52, 8: 52, 9: 53, 10: 53, 11: 54, 12: 54, 13: 55, 14: 55, 15: 56, 16: 56,
-                        17: 37, 18: 37, 19: 38, 20: 38, 21: 39, 22: 39, 23: 40, 24: 40, 25: 33, 26: 33, 27: 34, 28: 34, 29: 32, 30: 32,
-                        33: 36, 34: 36, 37: 45, 38: 45, 39: 46, 40: 46, 41: 44, 42: 44, 45: 48, 46: 48, 49: 69, 50: 69, 51: 70, 52: 70, 53: 71, 54: 71, 55: 72, 56: 72,
-                        57: 65, 58: 65, 59: 66, 60: 66, 61: 64, 62: 64, 65: 68, 66: 68, 69: 77, 70: 77, 71: 78, 72: 78, 73: 76, 74: 76, 77: 80, 78: 80}
-                dict_mesta = [31, 32, 35, 36, 43, 44, 47, 48, 63, 64, 67, 68, 75, 76, 79, 80]
+                    29: 31, 30: 31}
+                dict_loser = {29: 32, 30: 32}
+                dict_mesta = [31, 32]
                 flag_full = 1
         elif vid_setki == 'Олимпийская (минус 2)':
             if max_pl == 8:
@@ -21180,14 +21348,12 @@ class MainWindow(QMainWindow):
                     15: 24, 16: 24, 17: 25, 18: 25, 19: 26, 20: 26, 21: 27, 22: 27, 23: 28, 24: 28, 25: 29, 26: 29, 27: 30, 28: 30, 
                     29: 31, 30: 31, 32: 40, 33: 41, 34: 42, 35: 43, 36: 44, 37: 45, 38: 46, 39: 47, 40: 48, 41: 48, 42: 49, 43: 49, 44: 50, 45: 50, 46: 51,
                     47: 51, 48: 52, 49: 53, 50: 54, 51: 55, 52: 56, 53: 56, 54: 57, 55: 57, 56: 58, 57: 59, 58: 60, 59: 60, 63: 65, 64: 65, 67: 69, 68: 69, 71: 75, 72: 75, 73: 76, 74: 76, 
-                    75: 77, 76: 77, 79: 81, 80: 81, 83: 87, 84: 87, 85: 88, 86: 88, 87: 89, 88: 89, 91: 93, 92: 93}
-                
+                    75: 77, 76: 77, 79: 81, 80: 81, 83: 87, 84: 87, 85: 88, 86: 88, 87: 89, 88: 89, 91: 93, 92: 93}               
                 dict_loser = {1: 32, 2: 32, 3: 33, 4: 33, 5: 34, 6: 34, 7: 35, 8: 35, 9: 36, 10: 36, 11: 37, 12: 37, 13: 38, 14: 38, 15: 39, 16: 39,
                         17: 47, 18: 46, 19: 45, 20: 44, 21: 43, 22: 42, 23: 41, 24: 40, 25: 53, 26: 52, 27: 55, 28: 54, 29: 59, 30: 58,
                         32: 83, 33: 83, 34: 84, 35: 84, 36: 85, 37: 85, 38: 86, 39: 86, 40: 71, 41: 71, 42: 72, 43: 72, 44: 73, 45: 73, 46: 74, 47: 74, 48: 67, 49: 67, 
                         50: 68, 51: 68, 52: 63, 53: 63, 54: 64, 55: 64, 56: 62, 57: 62, 58: 61, 59: 61, 63: 66, 64: 66, 67: 70, 68: 70, 71: 79, 72: 79, 73: 80, 74: 80, 
-                        79: 82, 80: 82, 75: 78, 76: 78, 83: 91, 84: 91, 85: 92, 86: 92, 87: 90, 88: 90, 91: 94, 92: 94}
-                
+                        79: 82, 80: 82, 75: 78, 76: 78, 83: 91, 84: 91, 85: 92, 86: 92, 87: 90, 88: 90, 91: 94, 92: 94}                
                 dict_mesta = [31, 60, 61, 62, 65, 66, 69, 70, 77, 78, 81, 82, 89, 90, 93, 94]
 
         if number_game in dict_mesta: # если встреча за места
@@ -21203,6 +21369,105 @@ class MainWindow(QMainWindow):
 
         return snoska
     
+    def number_of_game(self, number_game, vid_setki, max_pl, no_game=""):
+        """Определяет, куда сносить победителя/проигравшего матча в сетке."""
+        snoska = []
+        flag_full = 0
+
+        if vid_setki == 'Олимпийская (с розыгрышем всех мест)':
+            if max_pl == 8:
+                dict_winner = {1:5, 2:5, 3:6, 4:6, 5:7, 6:7, 9:11, 10:11}
+                dict_loser = {1:9, 2:9, 3:10, 4:10, 5:8, 6:8, 9:12, 10:12}
+                dict_mesta = [7, 8, 11, 12]
+            elif max_pl == 16:
+                dict_winner = {1: 9, 2: 9, 3: 10, 4: 10, 5: 11, 6: 11, 7: 12, 8: 12, 9: 13, 10: 13, 11: 14, 12: 14, 13: 15, 14: 15,
+                    17: 19, 18: 19, 21: 25, 22: 25, 23: 26, 24: 26, 25: 27, 26: 27, 29: 31, 30: 31}
+                dict_loser = {1: 21, 2: 21, 3: 22, 4: 22, 5: 23, 6: 23, 7: 24, 8: 24, 9: 17, 10: 17, 11: 18, 12: 18, 13: 16, 14: 16,
+                        17: 20, 18: 20, 21: 29, 22: 29, 23: 30, 24: 30, 25: 28, 26: 28, 29: 32, 30: 32}
+                dict_mesta = [15, 16, 19, 20, 27, 28, 31, 32]
+            elif max_pl == 32:
+                dict_winner = {1: 17, 2: 17, 3: 18, 4: 18, 5: 19, 6: 19, 7: 20, 8: 20, 9: 21, 10: 21, 11: 22, 12: 22, 13: 23, 14: 23,
+                    15: 24, 16: 24, 17: 25, 18: 25, 19: 26, 20: 26, 21: 27, 22: 27, 23: 28, 24: 28, 25: 29, 26: 29, 27: 30, 28: 30, 
+                    29: 31, 30: 31, 33: 35, 34: 35, 37: 41, 38: 41, 39: 42, 40: 42, 41: 43, 42: 43, 45: 47, 46: 47, 49: 57, 50: 57,
+                    51: 58, 52: 58, 53: 59, 54: 59, 55: 60, 56: 60, 57: 61, 58: 61, 59: 62, 60: 62, 61: 63, 62: 63, 65: 67, 66: 67,
+                    69: 73, 70: 73, 71: 74, 72: 74, 73: 75, 74: 75, 77: 79, 78: 79}
+                dict_loser = {1: 49, 2: 49, 3: 50, 4: 50, 5: 51, 6: 51, 7: 52, 8: 52, 9: 53, 10: 53, 11: 54, 12: 54, 13: 55, 14: 55, 15: 56, 16: 56,
+                        17: 37, 18: 37, 19: 38, 20: 38, 21: 39, 22: 39, 23: 40, 24: 40, 25: 33, 26: 33, 27: 34, 28: 34, 29: 32, 30: 32,
+                        33: 36, 34: 36, 37: 45, 38: 45, 39: 46, 40: 46, 41: 44, 42: 44, 45: 48, 46: 48, 49: 69, 50: 69, 51: 70, 52: 70, 53: 71, 54: 71, 55: 72, 56: 72,
+                        57: 65, 58: 65, 59: 66, 60: 66, 61: 64, 62: 64, 65: 68, 66: 68, 69: 77, 70: 77, 71: 78, 72: 78, 73: 76, 74: 76, 77: 80, 78: 80}
+                dict_mesta = [31, 32, 35, 36, 43, 44, 47, 48, 63, 64, 67, 68, 75, 76, 79, 80]
+        elif vid_setki == 'Олимпийская (за 1-3 место)':
+            if max_pl == 8:
+                dict_winner = {1:5, 2:5, 3:6, 4:6, 5:7, 6:7}
+                if no_game == "3":
+                    dict_loser = {}          # проигравшие никуда не сносятся
+                    dict_mesta = [7]         # только финал (1-2)
+                else:
+                    dict_loser = {5:8, 6:8}
+                    dict_mesta = [7, 8]
+                flag_full = 1
+            elif max_pl == 16:
+                dict_winner = {1: 9, 2: 9, 3: 10, 4: 10, 5: 11, 6: 11,
+                            7: 12, 8: 12, 9: 13, 10: 13, 11: 14, 12: 14,
+                            13: 15, 14: 15}
+                if no_game == "3":
+                    dict_loser = {}
+                    dict_mesta = [15]
+                else:
+                    dict_loser = {13: 16, 14: 16}
+                    dict_mesta = [15, 16]
+                flag_full = 1
+            elif max_pl == 32:
+                dict_winner = {1: 17, 2: 17, 3: 18, 4: 18, 5: 19, 6: 19, 7: 20, 8: 20, 9: 21, 10: 21, 11: 22, 12: 22, 13: 23, 14: 23,
+                                    15: 24, 16: 24, 17: 25, 18: 25, 19: 26, 20: 26, 21: 27, 22: 27, 23: 28, 24: 28, 25: 29, 26: 29, 27: 30, 28: 30, 
+                                    29: 31, 30: 31}
+                if no_game == "3":
+                    dict_loser = {}
+                    dict_mesta = [31]
+                else:
+                    dict_loser = {29: 32, 30: 32}
+                    dict_mesta = [31, 32]
+                flag_full = 1
+        elif vid_setki == 'Олимпийская (минус 2)':
+            if max_pl == 8:
+                dict_winner = {1:5, 2:5, 3:6, 4:6, 5:7, 6:7, 8:10, 9:11, 10:12, 11:12}
+                dict_loser = {1:8, 2:8, 3:9, 4:9, 5:11, 6:10, 10:13, 11:13, 8:14, 9:14}
+                dict_mesta = [7, 12, 13, 14]
+            elif max_pl == 16:
+                dict_winner = {1:9, 2:9, 3:10, 4:10, 5:11, 6:11, 7:12, 8:12, 9:13, 10:13, 11:14, 12:14, 13:15, 14:15,
+                    16:20, 17:21, 18:22, 19:23, 20:24, 21:24, 22:25, 23:25, 24:26, 25:27, 26:28, 27:28, 31:33, 32:33, 35:37, 36:37}
+                dict_loser = {1:16, 2:16, 3:17, 4:17, 5:18, 6:18, 7:19, 8:19, 9:23, 10:22, 11:21, 12:20, 13:26, 14:27,
+                        16:35, 17:35, 18:36, 19:36, 20:31, 21:31, 22:32, 23:32, 24:30, 25:30, 26:29, 27:29, 31:34, 32:34, 35:38, 36:38}
+                dict_mesta = [15, 28, 29, 30, 33, 34, 37, 38]
+            elif max_pl == 32:
+                dict_winner = {1: 17, 2: 17, 3: 18, 4: 18, 5: 19, 6: 19, 7: 20, 8: 20, 9: 21, 10: 21, 11: 22, 12: 22, 13: 23, 14: 23,
+                    15: 24, 16: 24, 17: 25, 18: 25, 19: 26, 20: 26, 21: 27, 22: 27, 23: 28, 24: 28, 25: 29, 26: 29, 27: 30, 28: 30, 
+                    29: 31, 30: 31, 32: 40, 33: 41, 34: 42, 35: 43, 36: 44, 37: 45, 38: 46, 39: 47, 40: 48, 41: 48, 42: 49, 43: 49, 44: 50, 45: 50, 46: 51,
+                    47: 51, 48: 52, 49: 53, 50: 54, 51: 55, 52: 56, 53: 56, 54: 57, 55: 57, 56: 58, 57: 59, 58: 60, 59: 60, 63: 65, 64: 65, 67: 69, 68: 69, 71: 75, 72: 75, 73: 76, 74: 76, 
+                    75: 77, 76: 77, 79: 81, 80: 81, 83: 87, 84: 87, 85: 88, 86: 88, 87: 89, 88: 89, 91: 93, 92: 93}               
+                dict_loser = {1: 32, 2: 32, 3: 33, 4: 33, 5: 34, 6: 34, 7: 35, 8: 35, 9: 36, 10: 36, 11: 37, 12: 37, 13: 38, 14: 38, 15: 39, 16: 39,
+                        17: 47, 18: 46, 19: 45, 20: 44, 21: 43, 22: 42, 23: 41, 24: 40, 25: 53, 26: 52, 27: 55, 28: 54, 29: 59, 30: 58,
+                        32: 83, 33: 83, 34: 84, 35: 84, 36: 85, 37: 85, 38: 86, 39: 86, 40: 71, 41: 71, 42: 72, 43: 72, 44: 73, 45: 73, 46: 74, 47: 74, 48: 67, 49: 67, 
+                        50: 68, 51: 68, 52: 63, 53: 63, 54: 64, 55: 64, 56: 62, 57: 62, 58: 61, 59: 61, 63: 66, 64: 66, 67: 70, 68: 70, 71: 79, 72: 79, 73: 80, 74: 80, 
+                        79: 82, 80: 82, 75: 78, 76: 78, 83: 91, 84: 91, 85: 92, 86: 92, 87: 90, 88: 90, 91: 94, 92: 94}                
+                dict_mesta = [31, 60, 61, 62, 65, 66, 69, 70, 77, 78, 81, 82, 89, 90, 93, 94]
+
+        if number_game in dict_mesta:
+            snoska = [0, 0, (number_game * -1)]
+        else:
+            game_winner = dict_winner[number_game]
+            snoska.append(game_winner)
+            if flag_full == 0:
+                game_loser = dict_loser[number_game]
+            else:
+                if no_game == "":# 3-е место разыгывается                    
+                    game_loser = dict_loser[number_game]
+                else:
+                    game_loser = 0
+            snoska.append(game_loser)
+
+        return snoska
+
     def check_olympic_pairs_conflicts(self, stage_name):
         """
         Проверяет пары в олимпийской сетке на конфликты по региону и тренеру.
@@ -21748,12 +22013,7 @@ class MainWindow(QMainWindow):
         cw = ((0.3 * cm, 4.6 * cm, 0.4 * cm, 3.0 * cm, 0.4 * cm, 3.0 * cm, 0.4 * cm, 4.8 * cm, 1.5 * cm, 0.4 * cm))
         # основа сетки на чем чертить таблицу (ширина столбцов и рядов, их кол-во)
         self.color_mesta(data, first_mesto, table, fin) # раскрашивает места участников красным цветом
-        # ============= данные игроков и встреч и размещение по сетке =============
-        # tds = self.write_in_setka(data, fin, first_mesto, table)
-        #===============
-        cw = ((0.3 * cm, 4.6 * cm, 0.4 * cm, 3.0 * cm, 0.4 * cm, 3.0 * cm, 0.4 * cm, 4.8 * cm, 1.5 * cm, 0.4 * cm))
-        # основа сетки на чем чертить таблицу (ширина столбцов и рядов, их кол-во)
-        self.color_mesta(data, first_mesto, table, fin) # раскрашивает места участников красным цветом
+
         t = Table(data, cw, 40 * [0.6 * cm])
         # =========  цикл создания стиля таблицы ================
         # ==== рисует основной столбец сетки 
@@ -23015,6 +23275,23 @@ class MainWindow(QMainWindow):
             2.5 * cm, 0.35 * cm, 3.0 * cm, 0.3 * cm))
         # основа сетки на чем чертить таблицу (ширина столбцов и рядов, их кол-во)
         style_color = self.color_mesta(data, first_mesto, table, fin) # раскрашивает места участников красным цветом
+
+        # # ---- 3-е место не разыгрывается: сдвигаем «3 Место» к именам ----
+        # if not play_third:
+        #     # в setka_32 проигравшие полуфиналов (29, 30) уже в data[60][9] и data[62][9]
+        #     # (пишет write_in_setka через -29 и -30).
+        #     # «3 Место» от color_mesta стоит в 59 и 64 — переносим к именам.
+        #     data[59][11] = ""
+        #     data[64][11] = ""
+        #     data[60][11] = "3 Место"
+        #     data[62][11] = "3 Место"
+
+        #     # Стили для новых позиций (красный, по центру — как в color_mesta)
+        #     style_color.append(('TEXTCOLOR', (11, 60), (11, 60), colors.red))
+        #     style_color.append(('ALIGN',    (11, 60), (11, 60), 'CENTER'))
+        #     style_color.append(('TEXTCOLOR', (11, 62), (11, 62), colors.red))
+        #     style_color.append(('ALIGN',    (11, 62), (11, 62), 'CENTER'))
+
         t = Table(data, cw, strok * [0.35 * cm])
         # =========  цикл создания стиля таблицы =======
         # ========= 1 страница =========
