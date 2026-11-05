@@ -20629,16 +20629,48 @@ class MainWindow(QMainWindow):
                         data[row_idx + 1][col_idx + 1] = score_str
 
                 # 3.3. Проигравший — в ячейку с -match_num
-                if no_game == "3": # сразу пишет фамилии игроков проигравших в полуфинале
+                # if no_game == "3": # сразу пишет фамилии игроков проигравших в полуфинале
+                #     if table in ("setka_32", "setka_32_full"):
+                #         if match_num in semifinal_matches:
+                #             loser_cells = {-29:[(61, 10)], -30:[(66, 10)]}
+                #     elif table in ("setka_16", "setka_16_full"):
+                #         if match_num in semifinal_matches:
+                #             loser_cells = {-13:[(29, 8)], -14:[(31, 8)]}
+                #     elif table in ("setka_8", "setka_8_full"):
+                #         if match_num in semifinal_matches:
+                #             loser_cells = {-5:[(16, 6)], -6:[(18, 6)]}
+
+                # ---- переопределение координат проигравших полуфиналов ----
+                # при no_game == "3" проигравшие полуфиналов идут СРАЗУ на место 3-го
+                # (не в матч 32), поэтому задаём им отдельные ячейки.
+                # ВАЖНО: не перезаписываем loser_cells целиком, а добавляем координаты.
+                if no_game == "3" and match_num in semifinal_matches:
                     if table in ("setka_32", "setka_32_full"):
-                        if match_num in semifinal_matches:
-                            loser_cells = {-29:[(61, 10)], -30:[(66, 10)]}
+                        # в 32-сетке проигравшие 29/30 → строки 60 и 62, столбец 9
+                        semifinal_target = {
+                            29: (60, 8),
+                            30: (62, 8),
+                        }
                     elif table in ("setka_16", "setka_16_full"):
-                        if match_num in semifinal_matches:
-                            loser_cells = {-13:[(29, 9)], -14:[(31, 9)]}
+                        # 16-сетка: строки и столбцы надо проверить по вашей разметке
+                        # предполагаю: победитель пишется в col_idx+1,
+                        # значит проигравший в ту же строку, тот же столбец
+                        semifinal_target = {
+                            13: (29, 8),
+                            14: (31, 8),
+                        }
                     elif table in ("setka_8", "setka_8_full"):
-                        if match_num in semifinal_matches:
-                            loser_cells = {-5:[(16, 7)], -6:[(18, 7)]}
+                        semifinal_target = {
+                            5: (14, 6),
+                            6: (16, 6),
+                        }
+                    else:
+                        semifinal_target = {}
+
+                    if match_num in semifinal_target:
+                        r, c = semifinal_target[match_num]
+                        # переопределяем только для ЭТОГО матча, остальные не трогаем
+                        loser_cells[-match_num] = [(r, c)]
 
                 for l_row, l_col in loser_cells.get(-match_num, []):
                     if l_col + 1 < len(data[l_row]):
@@ -21460,8 +21492,11 @@ class MainWindow(QMainWindow):
             if flag_full == 0:
                 game_loser = dict_loser[number_game]
             else:
-                if no_game == "":# 3-е место разыгывается                    
-                    game_loser = dict_loser[number_game]
+                if no_game == "":# 3-е место разыгывается
+                    game_loser = 0 if number_game not in dict_loser else dict_loser[number_game] 
+                    #     game_loser = 0
+                    # else:                   
+                    #     game_loser = dict_loser[number_game]
                 else:
                     game_loser = 0
             snoska.append(game_loser)
@@ -22544,6 +22579,18 @@ class MainWindow(QMainWindow):
             (System.sex == self.current_sex) &
             (System.stage == fin)).get()
         max_pl = finals.max_player # максимальное число игроков в сетке
+ # ===== Проверяем, разыгрывается ли 3-е место =====
+        play_third = True
+        try:
+            system_obj = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == self.current_sex) &
+                (System.stage == fin)
+            )
+            if system_obj and (system_obj.no_game or "").strip() == "3":
+                play_third = False
+        except Exception as e:
+            print(f"setka_16_made: play_third check: {e}")
 
         if fin in pairs_list:
             first_mesto = 1
@@ -22569,13 +22616,32 @@ class MainWindow(QMainWindow):
             y += 1
             data[i][0] = str(y)  # рисует начальные номера таблицы 1-16
         # ========= нумерация встреч сетки ==========
-        self.draw_num(row_n=1, row_step=2, col_n=2, number_of_columns=4, number_of_game=1, player=16, data=data) # рисует номера встреч 1-32
+        number_of_game = self.draw_num(row_n=1, row_step=2, col_n=2, number_of_columns=4, number_of_game=1, player=16, data=data) # рисует номера встреч 1-32
         
-        data[25][8] = str(-15)
-        data[29][8] = str(16)  # создание номеров встреч 16
-        data[31][8] = str(-16)
-    
-        #========= расписание ===========
+
+        # вcтречи 13-14 (полуфиналы) есть всегда — их проигравшие идут
+        # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+        data[28][6] = str((number_of_game - 3) * -1)   # проигравший 13
+        data[30][6] = str((number_of_game - 2) * -1)   # проигравший 14
+
+        if play_third:
+            # 3-е место разыгрывается — создаём матч 32 (за 3-4)
+            data[25][8] = str((number_of_game - 1) * -1)  # -15
+            data[29][8] = str(number_of_game)             # 16
+            data[31][8] = str((number_of_game) * -1)      # -16
+            # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+            data[28][6] = str((number_of_game - 3) * -1)   # проигравший 13
+            data[30][6] = str((number_of_game - 2) * -1)   # проигравший 14
+        else:
+            # 3-е место не разыгрывается — матч 32 не создаём
+            data[25][8] = ""
+            data[28][6] = ""
+            data[30][6] = ""
+            # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+            data[29][9] = ""   # проигравший 13
+            data[31][9] = ""   # проигравший 14
+
+        # #========= расписание ===========
         style_color_schedule = self.schedule_data(data, fin)
         # ============= данные игроков и встреч и размещение по сетке =============
         if fin != "Чистая сетка":
@@ -22591,13 +22657,25 @@ class MainWindow(QMainWindow):
         # =========  цикл создания стиля таблицы ================
         # ==== рисует основной столбец сетки 
         style = self.draw_setka(1, 1, 16, style) # рисует кусок сетки(номер столбца, номер строки на 16 человека)
-        style = self.draw_setka(7, 29, 2, style) # рисует кусок сетки(номер столбца, номер строки на 32 человека)
-    
+     
         # ======= встречи за места =====
         for q in range(0, 11, 10):
             fn = ('LINEABOVE', (9, q + 16), (10, q + 16),
                 1, colors.darkblue)  # за 1-2 место
             style.append(fn)
+
+        if play_third:
+            # линии встречи 32 (за 3-4)
+            for l in range(29, 32, 2):
+                fn = ('LINEABOVE', (7, l), (8, l), 1, colors.darkblue)
+                style.append(fn)
+            fn = ('BOX', (8, 29), (8, 30), 1, colors.darkblue)
+            style.append(fn)
+            fn = ('SPAN', (8, 29), (8, 30))
+            style.append(fn)
+            fn = ('BACKGROUND', (8, 29), (8, 30), colors.lightyellow)
+            style.append(fn)
+
         for q in range(0, 3, 2):
             fn = ('LINEABOVE', (9, q + 30), (10, q + 30),
                 1, colors.darkblue)  # за 3-4 место
