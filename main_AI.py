@@ -20526,7 +20526,9 @@ class MainWindow(QMainWindow):
         Возвращает изменённый data (in-place).
         """
         pairs_list = ["Мужские пары", "Женские пары", "Смешанные пары"]
-        
+       
+        is_pairs = stage in pairs_list
+  
         if stage in pairs_list:
             player = Players_double.select().where(Players_double.title_id == self.current_title_id)
         else:  
@@ -20670,33 +20672,102 @@ class MainWindow(QMainWindow):
                             data[l_row][l_col + 1] = loser_name
 
                 # если встреча за место, то записывает DB ====
+                # if match_num in place_list:
+                #     players = [winner_name, loser_name,]
+                #     result = self.build_place_matches(first_mesto, place_list)
+                #     result_match = result[match_num]
+                #     k = 0
+                #     for name in players:                        
+                #         player_id = next((info["player_id"] for info in posev_data.values() if info["name"] == name),None)
+                #         players_info = {'player_id': player_id, 'place': result_match[k]} 
+                #         # 1. Обновляем Choice - поле mesto_final
+                #         choice = Choice.get_or_none(
+                #             (Choice.title_id == self.current_title_id) &
+                #             (Choice.player_choice == player_id)
+                #         )
+                #         if choice:
+                #             # Обновляем поле mesto_final
+                #             choice.mesto_final = players_info['place']
+                #             choice.save()
+                        
+                #         # 2. Обновляем Player - поле mesto
+                #         player = Player.get_or_none(Player.id == player_id)
+                #         if player:
+                #             player.mesto = players_info['place']
+                #             player.save()
+
+                #         k += 1  
+                # если встреча за место, то записывает DB ====
                 if match_num in place_list:
-                    players = [winner_name, loser_name,]
+                    players = [winner_name, loser_name]
                     result = self.build_place_matches(first_mesto, place_list)
                     result_match = result[match_num]
                     k = 0
-                    for name in players:                        
-                        player_id = next((info["player_id"] for info in posev_data.values() if info["name"] == name),None)
-                        players_info = {'player_id': player_id, 'place': result_match[k]} 
-                        # 1. Обновляем Choice - поле mesto_final
-                        choice = Choice.get_or_none(
-                            (Choice.title_id == self.current_title_id) &
-                            (Choice.player_choice == player_id)
-                        )
-                        if choice:
-                            # Обновляем поле mesto_final
-                            choice.mesto_final = players_info['place']
-                            choice.save()
-                        
-                        # 2. Обновляем Player - поле mesto
-                        player = Player.get_or_none(Player.id == player_id)
-                        if player:
-                            player.mesto = players_info['place']
-                            player.save()
+                    for name in players:
+                        if not name or name == "X":
+                            k += 1
+                            continue
 
-                        k += 1  
+                        # ищем player_id по posev_data
+                        player_id = None
+                        for info in posev_data.values():
+                            if info.get("name") == name \
+                                    or info.get("name_city") == name:
+                                player_id = info.get("player_id")
+                                break
+                        if not player_id:
+                            k += 1
+                            continue
 
-                # ---- 3-е место для проигравших полуфиналов (no_game == "3") ----
+                        place = result_match[k]
+
+                        if is_pairs:
+                            # ---------- ПАРЫ ----------
+                            # 1. Choice_double_player.mesto_final
+                            try:
+                                cdp = Choice_double_player.get_or_none(
+                                    (Choice_double_player.title_id == self.current_title_id) &
+                                    (Choice_double_player.player_double_id == player_id)
+                                )
+                                if cdp:
+                                    cdp.mesto_final = place
+                                    cdp.save()
+                            except Exception as e:
+                                print(f"write_in_setka: Choice_double_player: {e}")
+
+                            # 2. Players_double.mesto
+                            try:
+                                pair = Players_double.get_or_none(
+                                    Players_double.id == player_id
+                                )
+                                if pair:
+                                    pair.mesto = place
+                                    pair.save()
+                            except Exception as e:
+                                print(f"write_in_setka: Players_double: {e}")
+                        else:
+                            # ---------- ЛИЧНЫЕ ----------
+                            try:
+                                choice = Choice.get_or_none(
+                                    (Choice.title_id == self.current_title_id) &
+                                    (Choice.player_choice_id == player_id)
+                                )
+                                if choice:
+                                    choice.mesto_final = place
+                                    choice.save()
+                            except Exception as e:
+                                print(f"write_in_setka: Choice: {e}")
+
+                            try:
+                                pl = Player.get_or_none(Player.id == player_id)
+                                if pl:
+                                    pl.mesto = place
+                                    pl.save()
+                            except Exception as e:
+                                print(f"write_in_setka: Player: {e}")
+
+                        k += 1
+                # ---- 3-е место для проигравших полуфиналов (no_game == "3") ----        
                 if no_game == "3" and match_num in semifinal_matches and loser_name:
                     player_id = next(
                         (info["player_id"] for info in posev_data.values()
@@ -20705,20 +20776,71 @@ class MainWindow(QMainWindow):
                         None
                     )
                     if player_id:
-                        try:
-                            choice = Choice.get_or_none(
-                                (Choice.title_id == self.current_title_id) &
-                                (Choice.player_choice == player_id)
-                            )
-                            if choice:
-                                choice.mesto_final = 3
-                                choice.save()
-                            player_obj = Player.get_or_none(Player.id == player_id)
-                            if player_obj:
-                                player_obj.mesto = 3
-                                player_obj.save()
-                        except Exception as e:
-                            print(f"write_in_setka: 3rd place: {e}")
+                        if is_pairs:
+                            # ---------- ПАРЫ ----------
+                            try:
+                                cdp = Choice_double_player.get_or_none(
+                                    (Choice_double_player.title_id == self.current_title_id) &
+                                    (Choice_double_player.player_double_id == player_id)
+                                )
+                                if cdp:
+                                    cdp.mesto_final = 3
+                                    cdp.save()
+                            except Exception as e:
+                                print(f"write_in_setka: 3rd place Choice_double_player: {e}")
+
+                            try:
+                                pair = Players_double.get_or_none(
+                                    Players_double.id == player_id
+                                )
+                                if pair:
+                                    pair.mesto = 3
+                                    pair.save()
+                            except Exception as e:
+                                print(f"write_in_setka: 3rd place Players_double: {e}")
+                        else:
+                            # ---------- ЛИЧНЫЕ ----------
+                            try:
+                                choice = Choice.get_or_none(
+                                    (Choice.title_id == self.current_title_id) &
+                                    (Choice.player_choice_id == player_id)
+                                )
+                                if choice:
+                                    choice.mesto_final = 3
+                                    choice.save()
+                            except Exception as e:
+                                print(f"write_in_setka: 3rd place Choice: {e}")
+
+                            try:
+                                pl = Player.get_or_none(Player.id == player_id)
+                                if pl:
+                                    pl.mesto = 3
+                                    pl.save()
+                            except Exception as e:
+                                print(f"write_in_setka: 3rd place Player: {e}")
+        #         # ---- 3-е место для проигравших полуфиналов (no_game == "3") ----
+        #         if no_game == "3" and match_num in semifinal_matches and loser_name:
+        #             player_id = next(
+        #                 (info["player_id"] for info in posev_data.values()
+        #                  if info.get("name") == loser_name
+        #                  or info.get("name_city") == loser_name),
+        #                 None
+        #             )
+        #             if player_id:
+        #                 try:
+        #                     choice = Choice.get_or_none(
+        #                         (Choice.title_id == self.current_title_id) &
+        #                         (Choice.player_choice == player_id)
+        #                     )
+        #                     if choice:
+        #                         choice.mesto_final = 3
+        #                         choice.save()
+        #                     player_obj = Player.get_or_none(Player.id == player_id)
+        #                     if player_obj:
+        #                         player_obj.mesto = 3
+        #                         player_obj.save()
+        #                 except Exception as e:
+        #                     print(f"write_in_setka: 3rd place: {e}")
         return data
 
     def build_place_matches(self, first_mesto, place_list):
@@ -22683,7 +22805,7 @@ class MainWindow(QMainWindow):
         # fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
         # style.append(fn)
         for b in style_color_schedule:
-            ts.append(b)
+            style.append(b)
         ts = style   # стиль таблицы (список оформления строк и шрифта)
         t.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
                             ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
@@ -24136,7 +24258,7 @@ class MainWindow(QMainWindow):
                 city="",
                 region="",
                 razryad="",
-                coach_id=159,
+                coach_id=1,
                 pay_rejting="",
                 comment="",
                 application="",
