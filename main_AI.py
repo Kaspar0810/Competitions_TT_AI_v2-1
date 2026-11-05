@@ -22161,9 +22161,6 @@ class MainWindow(QMainWindow):
             data[i][0] = str(y)  # рисует начальные номера таблицы 1-16
         # ========= нумерация встреч сетки ==========
         number_of_game = self.draw_num(row_n=1, row_step=2, col_n=2, number_of_columns=3, number_of_game=1, player=8, data=data) # рисует номера встреч 1-32
-        # number_of_game = self.draw_num(row_n=16, row_step=2, col_n=6, number_of_columns=2, number_of_game=8, player=2, data=data) # рисует номера встреч 1-32
-        # number_of_game = self.draw_num_lost(row_n=16, row_step=2, col_n=4, number_of_game=5, player=2, data=data) # номера минус проигравшие встречи -1 -16
-
         # вcтречи 5-6 (полуфиналы) есть всегда — их проигравшие идут
         # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
         data[15][4] = str((number_of_game - 3) * -1)   # проигравший 5
@@ -22202,7 +22199,6 @@ class MainWindow(QMainWindow):
         # =========  цикл создания стиля таблицы ================
         # ==== рисует основной столбец сетки 
         style = self.draw_setka(1, 1, 8, style) # рисует кусок сетки(номер столбца, номер строки на 8 человека)
-        # style = self.draw_setka(5, 16, 2, style) # рисует кусок сетки(номер столбца, номер строки на 32 человека)
         # ======= встречи за места =====
         for q in range(0, 7, 6):
             fn = ('LINEABOVE', (7, q + 8), (8, q + 8),
