@@ -20628,18 +20628,6 @@ class MainWindow(QMainWindow):
                     else:
                         data[row_idx + 1][col_idx + 1] = score_str
 
-                # 3.3. Проигравший — в ячейку с -match_num
-                # if no_game == "3": # сразу пишет фамилии игроков проигравших в полуфинале
-                #     if table in ("setka_32", "setka_32_full"):
-                #         if match_num in semifinal_matches:
-                #             loser_cells = {-29:[(61, 10)], -30:[(66, 10)]}
-                #     elif table in ("setka_16", "setka_16_full"):
-                #         if match_num in semifinal_matches:
-                #             loser_cells = {-13:[(29, 8)], -14:[(31, 8)]}
-                #     elif table in ("setka_8", "setka_8_full"):
-                #         if match_num in semifinal_matches:
-                #             loser_cells = {-5:[(16, 6)], -6:[(18, 6)]}
-
                 # ---- переопределение координат проигравших полуфиналов ----
                 # при no_game == "3" проигравшие полуфиналов идут СРАЗУ на место 3-го
                 # (не в матч 32), поэтому задаём им отдельные ячейки.
@@ -22634,7 +22622,7 @@ class MainWindow(QMainWindow):
             data[30][6] = str((number_of_game - 2) * -1)   # проигравший 14
         else:
             # 3-е место не разыгрывается — матч 32 не создаём
-            data[25][8] = ""
+            data[25][8] = str((number_of_game - 1) * -1)  # -15
             data[28][6] = ""
             data[30][6] = ""
             # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
@@ -22694,7 +22682,8 @@ class MainWindow(QMainWindow):
             style.append(fn)
         # fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
         # style.append(fn)
-
+        for b in style_color_schedule:
+            ts.append(b)
         ts = style   # стиль таблицы (список оформления строк и шрифта)
         t.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
                             ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
@@ -23335,12 +23324,6 @@ class MainWindow(QMainWindow):
             data[60][8] = ""   # проигравший 29
             data[62][8] = ""   # проигравший 30
 
-        # data[60][8] = str((number_of_game - 3) * -1)  # номера проигравших 29
-        # data[62][8] = str((number_of_game - 2) * -1)  # номера проигравших 30
-        # data[55][10] = str((number_of_game - 1) * -1)  # номер проигравшего финал (-31)
-        # data[61][10] = str(number_of_game)  # создание номеров встреч 32
-        # data[66][10] = str((number_of_game) * -1)  # номер проигравшего финал (-32)
-
         #========= расписание ===========
         style_color_schedule = self.schedule_data(data, fin)
         # ============= данные игроков и встреч и размещение по сетке =============
@@ -23354,22 +23337,6 @@ class MainWindow(QMainWindow):
         # основа сетки на чем чертить таблицу (ширина столбцов и рядов, их кол-во)
         style_color = self.color_mesta(data, first_mesto, table, fin) # раскрашивает места участников красным цветом
 
-        # # ---- 3-е место не разыгрывается: сдвигаем «3 Место» к именам ----
-        # if not play_third:
-        #     # в setka_32 проигравшие полуфиналов (29, 30) уже в data[60][9] и data[62][9]
-        #     # (пишет write_in_setka через -29 и -30).
-        #     # «3 Место» от color_mesta стоит в 59 и 64 — переносим к именам.
-        #     data[59][11] = ""
-        #     data[64][11] = ""
-        #     data[60][11] = "3 Место"
-        #     data[62][11] = "3 Место"
-
-        #     # Стили для новых позиций (красный, по центру — как в color_mesta)
-        #     style_color.append(('TEXTCOLOR', (11, 60), (11, 60), colors.red))
-        #     style_color.append(('ALIGN',    (11, 60), (11, 60), 'CENTER'))
-        #     style_color.append(('TEXTCOLOR', (11, 62), (11, 62), colors.red))
-        #     style_color.append(('ALIGN',    (11, 62), (11, 62), 'CENTER'))
-
         t = Table(data, cw, strok * [0.35 * cm])
         # =========  цикл создания стиля таблицы =======
         # ========= 1 страница =========
@@ -23378,19 +23345,6 @@ class MainWindow(QMainWindow):
         for l in range(34, 57, 22):
             fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 1-2 места
             style.append(fn)
-
-        # # for l in range(62, 68, 5):
-        # #     fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 3-4 места
-        # #     style.append(fn)
-        # for l in range(61, 64, 2):
-        #     fn = ('LINEABOVE', (9, l), (10, l), 1, colors.darkblue)  # рисует линии встреч за -29 -30
-        #     style.append(fn)
-        # fn = ('BOX', (10, 61), (10, 62), 1, colors.darkblue)
-        # style.append(fn) 
-        # fn = ('SPAN', (10, 61), (10, 62))  # встреча 32
-        # style.append(fn)       
-        # fn = ('BACKGROUND', (10, 61), (10, 62), colors.lightyellow)  # встречи 32 за 3-4 место
-        # style.append(fn)
 
         # финальные линии (встреча 31, за 1-2 место) — рисуем всегда
         for l in range(62, 68, 5):
