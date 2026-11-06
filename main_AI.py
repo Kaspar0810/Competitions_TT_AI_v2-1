@@ -20912,7 +20912,12 @@ class MainWindow(QMainWindow):
         """список номерв встреч за места в зависимости от сетки"""
         place_list = []
 
-        if table == "setka_32":
+        if table == "setka_64":
+            if no_game == "3": # нет игры за 3-е место
+                place_list = [63]        # только финал
+            else:
+                place_list = [63, 64]
+        elif table == "setka_32":
             if no_game == "3": # нет игры за 3-е место
                 place_list = [31]        # только финал
             else:
@@ -20930,27 +20935,15 @@ class MainWindow(QMainWindow):
 
         if table == "setka_8_full":
             place_list = [7, 8, 11, 12]
-        elif table == "setka_8":
-            place_list = [7, 8]
         elif table == "setka_8_2":
             place_list = [7, 12, 13, 14]
         elif table == "setka_16_full":
             place_list = [15, 16, 19, 20, 27, 28, 31, 32]
-        elif table == "setka_16":
-            if no_game == "3":
-                place_list = [15]
-            else:
-                place_list = [15, 16]
         elif table == "setka_16_2":
             place_list =[15, 28, 29, 30, 33, 34, 37, 38]
         elif table == "setka_32_full":
             place_list = [31, 32, 35, 36, 43, 44, 47, 48,
                            63, 64, 67, 68, 75, 76, 79, 80]
-        elif table == "setka_32":
-            if no_game == "3": # нет игры за 3-е место
-                place_list = [31]        # только финал
-            else:
-                place_list = [31, 32]
         elif table == "setka_32_2":
             place_list = [31, 60, 61, 62, 65, 66, 69, 70,
                             77, 78, 81, 82, 89, 90, 93, 94]
@@ -23923,6 +23916,18 @@ class MainWindow(QMainWindow):
             (System.sex == self.current_sex)
         ).get()
         max_pl = finals.max_player
+        # ===== Проверяем, разыгрывается ли 3-е место =====
+        play_third = True
+        try:
+            system_obj = System.get_or_none(
+                (System.title_id == self.current_title_id) &
+                (System.sex == self.current_sex) &
+                (System.stage == fin)
+            )
+            if system_obj and (system_obj.no_game or "").strip() == "3":
+                play_third = False
+        except Exception as e:
+            print(f"setka_64_made: play_third check: {e}")
 
         if fin in pairs_list:
             first_mesto = 1
@@ -23952,61 +23957,69 @@ class MainWindow(QMainWindow):
 
         # ================== НОМЕРА МАТЧЕЙ ==================
         # --- Верхняя половина: строки 0-68 ---
-        self.draw_num(
-            row_n=3, row_step=2, col_n=2, number_of_columns=5,
+        number_of_game = self.draw_num(row_n=3, row_step=2, col_n=2, number_of_columns=5,
             number_of_game=1, player=64, data=data
         )
-        # Проигравшие верхней половины
-        data[59][8] = "A"    # проигравший 1/4 верхней половины
-        data[61][8] = "B"    # проигравший 1/4 верхней половины
-        data[60][10] = "63"    # проигравший 1/4 верхней половины
-        data[124][10] = "-61"    # проигравший 1/4 верхней половины
-        data[128][10] = "-62"    # проигравший 1/4 верхней половины
-        data[64][10] = "-63"    # проигравший 1/4 верхней половины
-      
-        # 1-е и 2-е место — рядом, но текст поставит write_in_setka через place_matches
-        data[56][11] = "1 место"        # 1-е место (запишет write_in_setka)
-        data[62][11] = "2 место"        # 2-е место
-        # ================== МАТЧ ЗА 3-е (64) на нижней половине ==================
-        # Встреча 64 — проигравшие финалов (61 и 62) разыгрывают 3-е место.
-        data[122][11] = "3 место"       # 3-е место (запишет write_in_setka)
-        data[126][11] = "3 место"       # 4-е место
 
+        # 1-е место — создаём матч 63 (за 1-2)
+        data[59][8] = str((number_of_game - 2) * 1)  # 61
+        data[60][10] = str(number_of_game)             # 63
+        data[61][8] = str((number_of_game - 1) * 1)      # 62
+        data[64][10] = str((number_of_game) * -1)  # -63
+        if play_third:
+            # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
+            data[123][8] = str((number_of_game - 2) * -1)   # проигравший 29
+            data[125][8] = str((number_of_game - 1) * -1)   # проигравший 30
+            data[124][10] = str(number_of_game + 1)   # проигравший 29
+            data[128][10] = str((number_of_game + 1) * -1)   # проигравший 30
+        else:
+            data[123][8] = ""   # проигравший 29
+            data[125][8] = ""   # проигравший 30
+            data[124][10] = "-61"   # проигравший 29
+            data[128][10] = "-62"   # проигравший 30
+        #========= расписание ===========
+        style_color_schedule = self.schedule_data(data, fin)
         # ================== ИГРОКИ И РЕЗУЛЬТАТЫ ==================
         if fin != "Чистая сетка":
-            tds = self.write_in_setka(
-                data, fin, first_mesto, table, posev_data,
-                place_matches={
-                    63: (1, 2),   # финал: победитель — 1-е, проигравший — 2-е
-                    64: (3, 4),   # за 3-е: победитель — 3-е, проигравший — 4-е
-                },
-            )
+            tds = self.write_in_setka(data, fin, first_mesto, table, posev_data)
         else:
             tds = None
-
         # ================== ШИРИНА И ТАБЛИЦА ==================
         cw = (0.2 * cm, 3.8 * cm, 0.35 * cm, 2.7 * cm, 0.35 * cm, 2.7 * cm,
             0.35 * cm, 2.7 * cm, 0.35 * cm, 2.5 * cm, 0.35 * cm, 3.0 * cm, 0.3 * cm)
+        
+        style_color = self.color_mesta(data, first_mesto, table, fin) # раскрашивает места участников красным цветом
+       
         t = Table(data, cw, strok * [0.36 * cm])
-
         # ================== СТИЛЬ ==================
         # 1) сетка верхней половины (1-32)
         style = self.draw_setka(1, 3, 64, style)
 
+        # финальная встреча
         style.append(('LINEBELOW', (9, 59), (10, 59), 1, colors.darkblue))
         style.append(('LINEBELOW', (9, 61), (10, 61), 1, colors.darkblue))
         style.append(('BOX', (10, 60), (10, 61), 1, colors.darkblue))
         style.append(('SPAN', (10, 60), (10, 61)))
         style.append(('BACKGROUND', (10, 60), (10, 61), colors.lightyellow))
-
-        # 3) линии финала и матча за 3-е
-        # финал: две линии — куда идут победители 61 и 62
-        style.append(('LINEABOVE', (10, 61), (11, 61), 1, colors.darkblue))
-        style.append(('LINEABOVE', (10, 65), (11, 65), 1, colors.darkblue))
+        # финальные линии (встреча 31, за 1-2 место) — рисуем всегда
+        for l in range(61, 66, 4):
+            fn = ('LINEABOVE', (11, l), (11, l), 1, colors.darkblue)
+            style.append(fn)
 
         # за 3-е: две линии
         style.append(('LINEABOVE', (11, 125), (11, 125), 1, colors.darkblue))
         style.append(('LINEABOVE', (11, 129), (11, 129), 1, colors.darkblue))
+        if play_third:
+            # линии встречи 32 (за 3-4)
+            for l in range(124, 127, 2):
+                fn = ('LINEABOVE', (9, l), (10, l), 1, colors.darkblue)
+                style.append(fn)
+            fn = ('BOX', (10, 124), (10, 125), 1, colors.darkblue)
+            style.append(fn)
+            fn = ('SPAN', (10, 124), (10, 125))
+            style.append(fn)
+            fn = ('BACKGROUND', (10, 124), (10, 125), colors.lightyellow)
+            style.append(fn)
 
         # 4) цвета и выравнивание
         for i in range(0, 11, 2):
@@ -24018,23 +24031,19 @@ class MainWindow(QMainWindow):
         # fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
         # style.append(fn)
 
-        # 5) красный текст для мест 1, 2, 3
-        style.append(('TEXTCOLOR', (11, 56), (11, 56), colors.red))    # 1-е место
-        style.append(('ALIGN', (11, 56), (11, 56), 'CENTER'))
-        style.append(('TEXTCOLOR', (11, 62), (11, 62), colors.red))    # 2-е место
-        style.append(('ALIGN', (11, 62), (11, 62), 'CENTER'))
-        style.append(('TEXTCOLOR', (11, 122), (11, 122), colors.red))  # 3-е место
-        style.append(('ALIGN', (11, 122), (11, 122), 'CENTER'))
-        style.append(('TEXTCOLOR', (11, 126), (11, 126), colors.red))  # 3-е место
-        style.append(('ALIGN', (11, 126), (11, 126), 'CENTER')) 
+        ts = style   # стиль таблицы (список оформления строк и шрифта)
+        for b in style_color:
+            ts.append(b)
+        for b in style_color_schedule:
+            ts.append(b)
 
         t.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
             ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
             ('FONTSIZE', (0, 0), (-1, -1), 6),
-            ('FONTNAME', (1, 0), (1, 64), "DejaVuSerif-Bold"),
-            ('FONTSIZE', (1, 0), (1, 64), 6),
-            ('LEADING', (1, 0), (1, 64), 6)] +
+            ('FONTNAME', (1, 0), (1, 128), "DejaVuSerif-Bold"),
+            ('FONTSIZE', (1, 0), (1, 128), 6),
+            ('LEADING', (1, 0), (1, 128), 6)] +
             style +
             [('TEXTCOLOR', (0, 0), (0, 129), colors.blue),
             ('VALIGN', (0, 0), (-1, -1), 'TOP')
@@ -25204,7 +25213,9 @@ class MainWindow(QMainWindow):
 
         ml = [] # столбец, ряд -1 ого места, ряд 2-ого места + 1, шаг между местами
         f = 0 # количество столбцов
-        if table == "setka_32":
+        if table == "setka_64":
+            f = 2
+        elif table == "setka_32":
             f = 2
         elif table == "setka_32_full":
             f = 13
@@ -25225,7 +25236,9 @@ class MainWindow(QMainWindow):
         k = 0
         for c in range(0, f):
             if c == 0: # 1-2 место
-                if table == "setka_32_2":
+                if table == "setka_64":
+                    ml = [11, 56, 63, 6] 
+                elif table == "setka_32_2":
                     ml = [13, 31, 54, 22] 
                 elif table == "setka_16_full" or table == "setka_16":
                     ml = [10, 14, 25, 10]
@@ -25240,7 +25253,9 @@ class MainWindow(QMainWindow):
                 elif table == "setka_32":
                     ml = [11, 31, 54, 22]
             elif c == 1: # 3-4 место
-                if table == "setka_32_2":
+                if table == "setka_64":
+                    ml = [11, 122, 127, 4]
+                elif table == "setka_32_2":
                     ml = [13, 80, 97, 16]  
                 elif table == "setka_16_full" or table == "setka_16":
                     ml = [10, 28, 31, 2] 
