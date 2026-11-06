@@ -24644,19 +24644,59 @@ class MainWindow(QMainWindow):
         Аргументы:
         match_number (int): Номер встречи
         highest_place (int): Наивысшее место в данной сетке
-        total_players (int): Количество участников (8, 16 или 32)
+        total_players (int): Количество участников (8, 16, 32 или 64)
         
         Возвращает:
         str: Название стадии матча
         """
         match_number = i
         # Проверка корректности параметров
-        valid_sizes = [8, 16, 32]
+        valid_sizes = [8, 16, 32, 64]
         if mp not in valid_sizes:
             return f"Ошибка: поддерживаются только сетки на {valid_sizes} участников"
         
         # Расчет базовых параметров
-        if mp == 32:
+                # Расчет базовых параметров
+        if mp == 64:
+            max_match = game
+            main_rounds = {
+                'first_round':   (1, 32,  f"1/32 финала"),
+                'second_round':  (33, 48, f"1/16 финала"),
+                'third_round':   (49, 56, f"1/8 финала"),
+                'quarter':       (57, 60, f"1/4 финала"),
+                'semi':          (61, 62, f"1/2 финала"),
+                'final':         (63, 63, f"финал"),
+            }
+
+            # Стыковые матчи за места (после 1-3):
+            #  - матч 64 — за 3-4
+            #  - группы по 4/8/16/32 для 5-8, 9-16, 17-32, 33-64
+            consolation = [
+                # 3-4 место (финал основной сетки)
+                {'matches': [64], 'offset': 2, 'type': 'final_group'},
+
+                # 5-8 место (8 пар) — 4 матча-«полуфинала группы» + финалы
+                {'matches': [65, 66, 67, 68], 'offset': 4, 'type': 'full_group_4'},
+
+                # 9-16 место (16 пар)
+                {'matches': [69, 70, 71, 72, 73, 74, 75, 76],
+                 'offset': 8, 'type': 'full_group_8'},
+
+                # 17-32 место (32 пары)
+                {'matches': [77, 78, 79, 80, 81, 82, 83, 84,
+                             85, 86, 87, 88, 89, 90, 91, 92],
+                 'offset': 16, 'type': 'full_group_16'},
+
+                # 33-64 место (64 пары) — самый большой блок
+                # (в вашей текущей 32-сетке для 33-64 используется
+                #  full_group_16 и full_group_8 — здесь сделаем аналогично)
+                {'matches': [93, 94, 95, 96, 97, 98, 99, 100,
+                             101, 102, 103, 104, 105, 106, 107, 108,
+                             109, 110, 111, 112, 113, 114, 115, 116,
+                             117, 118, 119, 120, 121, 122, 123, 124],
+                 'offset': 32, 'type': 'full_group_32'},
+            ]
+        elif mp == 32:
             max_match = game
             # Структура для 32 участников (как в Excel)
             main_rounds = {
@@ -24779,7 +24819,37 @@ class MainWindow(QMainWindow):
                         return f"за {highest_place + offset}-{highest_place + offset + 1} место"
                     else:  # Матч за 3-4 место в группе
                         return f"за {highest_place + offset + 2}-{highest_place + offset + 3} место"
-                
+                elif group['type'] == 'full_group_32':
+                    # Полная группа: 16 матчей в «1-м раунде» (32 пары)
+                    # + 8 во 2-м + 4 в 3-м + 2 в 4-м + 1 финал за места
+                    # Порядок матчей — как в сетке: сначала «1/16»,
+                    # затем «1/8», «1/4», «1/2», финал группы.
+                    #
+                    # idx: 0..15  → 1/16 (все 32 пары играют за 33-64)
+                    #      16..23 → 1/8  (за 33-48)
+                    #      24..27 → 1/4  (за 33-40)
+                    #      28..29 → 1/2  (за 33-36)
+                    #      30     → за 33-34
+                    #      31     → за 35-36
+                    if 0 <= idx <= 15:
+                        start_place = highest_place + offset
+                        end_place = highest_place + offset + 31
+                        return f"За {start_place}-{end_place} место"
+                    elif 16 <= idx <= 23:
+                        return (f"за {highest_place + offset}-"
+                                f"{highest_place + offset + 15} место")
+                    elif 24 <= idx <= 27:
+                        return (f"за {highest_place + offset}-"
+                                f"{highest_place + offset + 7} место")
+                    elif 28 <= idx <= 29:
+                        return (f"за {highest_place + offset}-"
+                                f"{highest_place + offset + 3} место")
+                    elif idx == 30:
+                        return (f"за {highest_place + offset}-"
+                                f"{highest_place + offset + 1} место")
+                    else:  # idx == 31
+                        return (f"за {highest_place + offset + 2}-"
+                                f"{highest_place + offset + 3} место")               
                 elif group['type'] == 'mixed_group':
                     # Смешанная группа (адаптация для 16 и 8 участников)
                     if idx == 0 or idx == 1:  # Полуфиналы
