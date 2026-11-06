@@ -2863,6 +2863,12 @@ class MainWindow(QMainWindow):
             match.loser = loser_name
             match.points_loser = points_loser
             match.score_loser = score_loser_game
+
+            # Сыгранный матч больше не нужен в расписании
+            match.schedule_date = None
+            match.schedule_time = None
+            match.schedule_table = ""
+
             match.save()
 
             # --- Обновление сетки для олимпийской системы ---
@@ -6893,6 +6899,12 @@ class MainWindow(QMainWindow):
             match.loser = loser_name
             match.points_loser = points_loser
             match.score_loser = score_loser_game
+
+            # Сыгранный матч больше не нужен в расписании
+            match.schedule_date = None
+            match.schedule_time = None
+            match.schedule_table = ""
+
             match.save()
             
             # Обновляем сетку (для олимпийской системы)
@@ -21568,6 +21580,19 @@ class MainWindow(QMainWindow):
                 else:
                     dict_loser = {29: 32, 30: 32}
                     dict_mesta = [31, 32]
+                flag_full = 1
+            elif max_pl == 64:
+                dict_winner = {1: 33, 2: 33, 3: 34, 4: 34, 5: 35, 6: 35, 7: 36, 8: 36, 9: 37, 10: 37, 11: 38, 12: 38, 13: 39, 14: 39,
+                                    15: 40, 16: 40, 17: 41, 18: 41, 19: 42, 20: 42, 21: 43, 22: 43, 23: 44, 24: 44, 25: 45, 26: 45, 27: 46, 28: 46,
+                                    29: 47, 30: 47, 31: 48, 32: 48, 33: 49, 34: 49, 35: 50, 36: 50, 37: 51, 38: 51, 39: 52, 40: 52, 41: 53, 42: 53,
+                                    43: 54, 44: 54, 45: 55, 46: 55, 47: 56, 48: 56, 49: 57, 50: 57, 51: 58, 52: 58, 53: 59, 54: 59, 55: 60, 56: 60,
+                                    57: 61, 58: 61, 59: 62, 60: 62, 61: 63, 62: 63, 63: 64, 64: 64}
+                if no_game == "3":
+                    dict_loser = {}
+                    dict_mesta = [63]
+                else:
+                    dict_loser = {61: 64, 62: 64}
+                    dict_mesta = [63, 64]
                 flag_full = 1
         elif vid_setki == 'Олимпийская (минус 2)':
             if max_pl == 8:

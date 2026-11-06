@@ -15,6 +15,7 @@ from reportlab.platypus import SimpleDocTemplate, Spacer
 from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase import pdfmetrics
+from xml.sax.saxutils import escape
 
 def resource_path(relative_path):
     """Возвращает путь к ресурсу, работая и в IDE, и в собранном exe."""
@@ -77,7 +78,52 @@ class BegunokPDF:
             - stage: стадия
             - match_num: номер матча
         """
-        
+        # ---- Стиль для ячейки «Субъект РФ» (с переносом на 2 строки) ----
+        region_style = ParagraphStyle(
+            'RegionStyle',
+            fontName='DejaVuSerif',
+            fontSize=6,          # при 8pt 2 строки не влезают в 7 мм
+            leading=6,         # 2 строки ≈ 16.5 pt < 17.84 pt (7 мм − 2 pt отступов)
+            alignment=TA_CENTER,
+            spaceBefore=0,
+            spaceAfter=0,
+        )
+
+        def _format_region(text):
+            """
+            Возвращает текст для Paragraph:
+              • короткий (≤ 20 симв.) — как есть;
+              • длинный с «область-область» — разбиваем по дефису через <br/>;
+              • иначе — как есть (пусть переносится по пробелам).
+            """
+            if not text:
+                return "___"
+            s = str(text).strip()
+            if not s:
+                return "___"
+
+            # короткое — не трогаем
+            if len(s) <= 20:
+                return escape(s)
+
+            # ищем «средний» дефис (оба куска ≥ 8 символов)
+            best_idx = -1
+            for i, ch in enumerate(s):
+                if ch == '-':
+                    left_len = i
+                    right_len = len(s) - i - 1
+                    if left_len >= 8 and right_len >= 8:
+                        best_idx = i
+                        break
+
+            if best_idx > 0:
+                left = escape(s[:best_idx + 1])   # с дефисом
+                right = escape(s[best_idx + 1:])
+                return f"{left}<br/>{right}"
+
+            # нет подходящего дефиса — отдаём как есть (перенос по пробелам)
+            return escape(s)
+
         table_data = []
         
         # Строка 0: Министерство спорта
@@ -156,16 +202,24 @@ class BegunokPDF:
         row10[31] = "7"
         table_data.append(row10)
         
-        # Строки 11-12: пустые (для участников)
+        # Строки 11-12: данные участников
         row11 = [""] * cols
-        row11[0] =  f"{data.get('player1', '___')}"
-        row11[9] =  f"{data.get('rank1', '___')}"
-        row11[11] =  f"{data.get('city1', '___')}"
+        row11[0] = f"{data.get('player1', '___')}"
+        row11[9] = f"{data.get('rank1', '___')}"
+        # «Субъект РФ» — через Paragraph, чтобы переносилось на 2 строки
+        row11[11] = Paragraph(
+            _format_region(data.get('city1', '')),
+            region_style,
+        )
         table_data.append(row11)
+
         row12 = [""] * cols
-        row12[0] =  f"{data.get('player2', '___')}"
-        row12[9] =  f"{data.get('rank2', '___')}"
-        row12[11] =  f"{data.get('city2', '___')}"
+        row12[0] = f"{data.get('player2', '___')}"
+        row12[9] = f"{data.get('rank2', '___')}"
+        row12[11] = Paragraph(
+            _format_region(data.get('city2', '')),
+            region_style,
+        )
         table_data.append(row12)
         
         # Строка 13: пустая
