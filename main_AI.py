@@ -34806,14 +34806,6 @@ class PlanDialog(QDialog):
         self.visible_spin.valueChanged.connect(self.on_visible_tables_changed)
         top_bar.addWidget(self.visible_spin)
 
-        # top_bar.addStretch()
-        # if not self.read_only:
-        #     self.add_time_btn = QPushButton("➕ Добавить время")
-        #     self.add_time_btn.clicked.connect(self.on_add_time)
-        #     top_bar.addWidget(self.add_time_btn)
-
-        # left_layout.addLayout(top_bar)
-
         top_bar.addStretch()
         if not self.read_only:
             self.add_time_btn = QPushButton("➕ Время")
@@ -34898,16 +34890,6 @@ class PlanDialog(QDialog):
         close_btn.clicked.connect(self.close)
         btns.addWidget(close_btn)
         outer.addLayout(btns)
-
-    # ------------------------------------------------------------------ Служебное
-    # def changeEvent(self, event):
-    #     super().changeEvent(event)
-    #     if event.type() == QEvent.WindowStateChange:
-    #         if self.isMinimized():
-    #             pass  # окно свернулось
-    #         elif self.isMaximized() or self.isNormal():
-    #             # окно вернулось — на всякий случай обновим таблицу
-    #             QTimer.singleShot(0, self._rebuild_table_headers)
 
     def closeEvent(self, event):
         if self.read_only:
@@ -35293,6 +35275,12 @@ class PlanDialog(QDialog):
     def _format_list_item(self, res):
         prefix = "[М] " if res.sex == "man" else "[Ж] "
         ng = res.number_group or ""
+        if ng == "Мужские пары":
+            ng = "МП"
+        elif ng == "Женские пары":
+            ng = "ЖП"
+        elif ng == "Смешанные пары":
+            ng = "СмП"
         tours = res.tours or ""
         rnd = res.round or ""
         stage_net = res.stage_net or ""
@@ -35313,16 +35301,24 @@ class PlanDialog(QDialog):
         rnd = res.round or ""
         stage_net = res.stage_net or ""
         sex_label = "М" if res.sex == "man" else "Ж"
-        if stage_net:
-            return f"{ng} {sex_label}\n{tours} / {stage_net}"
-        if "групп" in ng.lower():
+        if "пары" in ng.lower():
+            if ng == "Мужские пары":
+                ng = "МП"
+            elif ng == "Женские пары":
+                ng = "ЖП"
+            elif ng == "Смешанные пары":
+                ng = "СмП"
+            if stage_net:
+                return f"{ng} \n{tours} вст/ {stage_net}"            
+        elif "групп" in ng.lower():
             m = re.search(r'\d+', ng)
             gr = m.group() if m else "?"
             parts = [tours]
             if rnd:
                 parts.append(f"{rnd}-й тур")
             return f"Гр.{gr} {sex_label}\n{' / '.join(p for p in parts if p)}"
-        return f"{ng} {sex_label}\nВстреча {tours}"
+        else:
+            return f"{ng} {sex_label}\nВстреча {tours}"
 
     # ------------------------------------------------------------------ Время
     def on_add_time(self):
