@@ -20563,7 +20563,9 @@ class MainWindow(QMainWindow):
 
         semifinal_matches = []
         if no_game == "3":
-            if table in ("setka_32", "setka_32_full", "setka_32_2"):
+            if table in ("setka_64"):
+                semifinal_matches = [61, 62]
+            elif table in ("setka_32", "setka_32_full", "setka_32_2"):
                 semifinal_matches = [29, 30]
             elif table in ("setka_16", "setka_16_full", "setka_16_2"):
                 semifinal_matches = [13, 14]
@@ -20630,6 +20632,12 @@ class MainWindow(QMainWindow):
                         data[row_idx][col_idx - 1] = winner_name
                     elif table == "setka_16_2" and match_num == 28:
                         data[row_idx][col_idx - 1] = winner_name
+                    elif table == "setka_64" and match_num == 61:
+                        data[59][9] = winner_name
+                        data[row_idx][col_idx + 1] = winner_name
+                    elif table == "setka_64" and match_num == 62:
+                        data[61][9] = winner_name
+                        data[row_idx][col_idx + 1] = winner_name    
                     else:
                         data[row_idx][col_idx + 1] = winner_name
                 # 3.2. Счёт — под победителем (следующая строка, тот же столбец)
@@ -20648,16 +20656,17 @@ class MainWindow(QMainWindow):
                 # ВАЖНО: не перезаписываем loser_cells целиком, а добавляем координаты.
                 if no_game == "3" and match_num in semifinal_matches:
                     if table in ("setka_64"):
-                        # в 64-сетке проигравшие 29/30 → строки 60 и 62, столбец 9
+                        # в 64-сетке проигравшие 61/62 → строки 124 и 62, столбец 10
                         semifinal_target = {
-                            29: (61, 10),
-                            30: (66, 10),
+                            61: (124, 10),
+                            62: (128, 10),
                         }
+                        # pass
                     elif table in ("setka_32", "setka_32_full"):
                         # в 32-сетке проигравшие 29/30 → строки 60 и 62, столбец 9
                         semifinal_target = {
-                            29: (61, 10),
-                            30: (66, 10),
+                            29: (17, 8),
+                            30: (49, 8),
                         }
                     elif table in ("setka_16", "setka_16_full"):
                         # 16-сетка: строки и столбцы надо проверить по вашей разметке
@@ -20689,32 +20698,6 @@ class MainWindow(QMainWindow):
                         else:
                             data[l_row][l_col + 1] = loser_name
 
-                # если встреча за место, то записывает DB ====
-                # if match_num in place_list:
-                #     players = [winner_name, loser_name,]
-                #     result = self.build_place_matches(first_mesto, place_list)
-                #     result_match = result[match_num]
-                #     k = 0
-                #     for name in players:                        
-                #         player_id = next((info["player_id"] for info in posev_data.values() if info["name"] == name),None)
-                #         players_info = {'player_id': player_id, 'place': result_match[k]} 
-                #         # 1. Обновляем Choice - поле mesto_final
-                #         choice = Choice.get_or_none(
-                #             (Choice.title_id == self.current_title_id) &
-                #             (Choice.player_choice == player_id)
-                #         )
-                #         if choice:
-                #             # Обновляем поле mesto_final
-                #             choice.mesto_final = players_info['place']
-                #             choice.save()
-                        
-                #         # 2. Обновляем Player - поле mesto
-                #         player = Player.get_or_none(Player.id == player_id)
-                #         if player:
-                #             player.mesto = players_info['place']
-                #             player.save()
-
-                #         k += 1  
                 # если встреча за место, то записывает DB ====
                 if match_num in place_list:
                     players = [winner_name, loser_name]
@@ -23480,7 +23463,7 @@ class MainWindow(QMainWindow):
 
         strok = 69
         for i in range(0, strok):
-            # column_count[12] = i  # нумерация 10 столбца для удобного просмотра таблицы
+            column_count[12] = i  # нумерация 10 столбца для удобного просмотра таблицы
             list_tmp = column_count.copy()
             data.append(list_tmp)
         # ========= нумерация встреч сетки ==========
@@ -23562,8 +23545,8 @@ class MainWindow(QMainWindow):
             # центрирование номеров встреч
             fn = ('ALIGN', (i, 0), (i, strok), 'CENTER')
             style.append(fn)
-        # fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
-        # style.append(fn)
+        fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
+        style.append(fn)
         ts = style   # стиль таблицы (список оформления строк и шрифта)
         for b in style_color:
             ts.append(b)
@@ -23987,9 +23970,11 @@ class MainWindow(QMainWindow):
         )
 
         # 1-е место — создаём матч 63 (за 1-2)
-        data[59][8] = str((number_of_game - 2) * 1)  # 61
+        # data[59][8] = str((number_of_game - 2) * 1)  # 61
+        data[59][8] = "A"  # 61
         data[60][10] = str(number_of_game)             # 63
-        data[61][8] = str((number_of_game - 1) * 1)      # 62
+        # data[61][8] = str((number_of_game - 1) * 1)      # 62
+        data[61][8] = "B"      # 62
         data[64][10] = str((number_of_game) * -1)  # -63
         if play_third:
             # либо в матч за 3-4 (если разыгрывается), либо сразу на 3-е место
@@ -24023,6 +24008,8 @@ class MainWindow(QMainWindow):
         # финальная встреча
         style.append(('LINEBELOW', (9, 59), (10, 59), 1, colors.darkblue))
         style.append(('LINEBELOW', (9, 61), (10, 61), 1, colors.darkblue))
+        style.append(('LINEBELOW', (11, 33), (11, 33), 1, colors.darkblue))
+        style.append(('LINEBELOW', (11, 97), (11, 97), 1, colors.darkblue))
         style.append(('BOX', (10, 60), (10, 61), 1, colors.darkblue))
         style.append(('SPAN', (10, 60), (10, 61)))
         style.append(('BACKGROUND', (10, 60), (10, 61), colors.lightyellow))
@@ -24053,6 +24040,8 @@ class MainWindow(QMainWindow):
             style.append(('ALIGN', (i + 1, 0), (i + 1, strok - 1), 'LEFT'))
             style.append(('ALIGN', (i, 0), (i, strok - 1), 'CENTER'))
             style.append(('VALIGN', (i, 0), (i, strok - 1), 'MIDDLE'))
+        style.append(('ALIGN', (11, 61), (11, 61), 'RIGHT'))
+        style.append(('ALIGN', (11, 125), (11, 125), 'RIGHT'))
         # fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
         # style.append(fn)
 
