@@ -1,7 +1,37 @@
 from peewee import *
 
 
-db = MySQLDatabase("mysql_db", user="root", password="db_pass", host="localhost", port=3306)
+# db = MySQLDatabase("mysql_db", user="root", password="db_pass", host="localhost", port=3306)
+
+
+from peewee import MySQLDatabase
+
+# Создаём db с дефолтными параметрами — дальше init_from_config() переопределит
+db = MySQLDatabase("mysql_db", user="root", password="db_pass",
+                    host="localhost", port=3306)
+
+
+def init_from_config():
+    """Пересоздаёт параметры db из db_config.json (без пересоздания объекта)."""
+    try:
+        from db_setup import load_db_config
+        cfg = load_db_config()
+        db.init(
+            cfg["database"],
+            user=cfg["user"],
+            password=cfg["password"],
+            host=cfg["host"],
+            port=cfg["port"],
+        )
+    except Exception as e:
+        print(f"init_from_config: {e}")
+
+
+# Загружаем конфиг при импорте, если файл существует
+try:
+    init_from_config()
+except Exception:
+    pass
 
 def update_db_credentials(user, password, host='localhost', port=3306, database='mysql_db'):
     db.init(database, user=user, password=password, host=host, port=port)

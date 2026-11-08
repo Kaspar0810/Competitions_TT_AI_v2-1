@@ -197,7 +197,18 @@ class MainWindow(QMainWindow):
         # фильтры результатов пар
         self.current_doubles_stage_filter = None      # None = все стадии
         self.current_doubles_status_filter = "all"    # all / played / unplayed
-    
+
+
+    def open_reference_data_import(self):
+        """Открывает диалог импорта справочников (можно перезагружать в любой момент)."""
+        from import_initial_data import ReferenceDataImportDialog
+        dlg = ReferenceDataImportDialog(self)
+        dlg.exec_()
+        # после импорта — обновить формы
+        try:
+            self.load_combo_data()  # перечитать coaches_list, regions_list и т.п.
+        except Exception:
+            pass  
 # =========================
     def check_old_backups_on_startup(self):
         """Проверка старых бэкапов при запуске"""
@@ -10570,6 +10581,12 @@ class MainWindow(QMainWindow):
         backup_action = db_menu.addAction("⚙️ Управление бэкапами")
         backup_action.triggered.connect(self.open_backup_management)
 
+        # Импорт справочников (Регионы, Города, Тренеры, Отчества, Players_full)
+        import_refs_action = QAction("📚 Импорт справочников", self)
+        import_refs_action.triggered.connect(self.open_reference_data_import)
+        db_menu.addAction(import_refs_action)
+
+        db_menu.addSeparator()
         
         # Помощь
         help_menu = menubar.addMenu("Помощь")
@@ -37013,19 +37030,85 @@ class ChessboardDialog(QDialog):
             "tables":    self._parse_tables(self.tables_edit.text()),
         }
 
-def main():  
-    # Сначала проверяем БД
-    app = QApplication(sys.argv)
+# def main():  
+#     # Сначала проверяем БД
+#     app = QApplication(sys.argv)
 
-    if not setup_database():
-        sys.exit(1)
+#     if not setup_database():
+#         sys.exit(1)
 
-    window = MainWindow()
+#     window = MainWindow()
 
-    window.show()
+#     window.show()
 
-    sys.exit(app.exec_())
+#     sys.exit(app.exec_())
 
+def main():
+    import traceback
+    # from PyQt5.QtWidgets import QMessageBox
+
+    try:
+        app = QApplication(sys.argv)
+
+        if not setup_database():
+            QMessageBox.critical(
+                None, "Запуск невозможен",
+                "Без настроенной базы данных работа невозможна.\n"
+                "Программа будет закрыта.")
+            sys.exit(1)
+
+        # --- проверка/предложение импорта справочников ---
+        try:
+            from models import (db, Region, City, Coach,
+                                Patronymic, Players_full)
+            db.connect(reuse_if_open=True)
+
+            flags = {
+                "Регионы":         Region.select().count() > 0,
+                "Города":          City.select().count() > 0,
+                "Тренеры":         Coach.select().count() > 0,
+                "Отчества":        Patronymic.select().count() > 0,
+                "Players_full":    Players_full.select().count() > 0,
+            }
+            if not all(flags.values()):
+                lines = "\n".join(
+                    f"  • {k}: {'✔' if v else '— нужно загрузить'}"
+                    for k, v in flags.items()
+                )
+                reply = QMessageBox.question(
+                    None, "Первичная настройка справочников",
+                    "База данных готова.\n\n"
+                    f"Состояние справочников:\n{lines}\n\n"
+                    "Загрузить недостающие справочники сейчас?\n"
+                    "(можно позже — меню «База данных → "
+                    "📚 Импорт справочников»)",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes)
+                if reply == QMessageBox.Yes:
+                    from import_initial_data import InitialDataImportDialog
+                    dlg = InitialDataImportDialog()
+                    dlg.exec_()
+        except Exception as e:
+            print(f"Проверка справочников: {e}")
+            traceback.print_exc()
+
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec_())
+
+    except SystemExit:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        try:
+            QMessageBox.critical(
+                None, "Критическая ошибка при запуске",
+                f"Программа не смогла запуститься:\n\n"
+                f"{type(e).__name__}: {e}\n\n"
+                f"Подробный traceback сохранён в stdout.")
+        except Exception:
+            pass
+        sys.exit(2)
 
 if __name__ == "__main__":
 
