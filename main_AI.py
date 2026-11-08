@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import QCompleter
 from PyQt5.QtCore import QStringListModel
 from PyQt5.QtWidgets import QStackedWidget, QTableWidget, QTableWidgetItem, QTimeEdit
 from PyQt5.QtCore import QMimeData, QEvent, QSettings
-
+from PyQt5.QtCore import QStandardPaths
 
 from datetime import date, datetime, time as dtime, timedelta
 
@@ -33,7 +33,7 @@ from reportlab.lib.units import mm, cm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.styles import ParagraphStyle as PS
-from typing import List, Tuple, Dict, Optional, Set
+
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.colors import Color, black, blue
 import tempfile
@@ -51,12 +51,13 @@ from models import (Referee, GskMember, Title, Team, Players_double, Player, Ref
 
 # import datetime
 from datetime import date, datetime, time as dtime, timedelta
+from typing import List, Tuple, Dict, Optional, Set
 
 import pandas as pd
 import math
 import re
 import random
-import BackupManagementDialog
+
 import edit_stage
 
 import subprocess
@@ -70,7 +71,7 @@ from PyPDF2 import PdfMerger
 import auto_choice_group
 import manual_choice
 import db_setup
-
+import BackupManagementDialog
 
 from db_setup import setup_database
 from import_initial_data import InitialDataImportDialog
