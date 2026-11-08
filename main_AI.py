@@ -75,6 +75,15 @@ import db_setup
 from db_setup import setup_database
 from import_initial_data import InitialDataImportDialog
 from begunok_full import BegunokPDF
+
+
+import logging
+import os
+import sys
+from logging.handlers import RotatingFileHandler
+
+from PyQt5.QtCore import QStandardPaths
+
 # ======================== 1-й вариан расписания ======
 
 class MainWindow(QMainWindow):
@@ -189,28 +198,14 @@ class MainWindow(QMainWindow):
         self.current_doubles_stage_filter = None      # None = все стадии
         self.current_doubles_status_filter = "all"    # all / played / unplayed
     
-# import sys
-# import os
-
-    # def resource_path(relative_path):
-    #     if getattr(sys, 'frozen', False):
-    #         base_path = sys._MEIPASS
-    #     else:
-    #         base_path = os.path.abspath(".")
-    #     return os.path.join(base_path, relative_path)
-
-# Пример использования для иконки
-# icon_path = resource_path("my_icon.ico")
 # =========================
     def check_old_backups_on_startup(self):
         """Проверка старых бэкапов при запуске"""
-        # from datetime import datetime
         backup_dir = "backup_db"
         if not os.path.exists(backup_dir):
             return
         
         days = 3
-        # now = datetime.datetime.now()
         now = datetime.now()
         old_files = []
         for filename in os.listdir(backup_dir):
@@ -10581,9 +10576,47 @@ class MainWindow(QMainWindow):
         about_action = QAction("О программе", self)
         about_action.triggered.connect(self.about_dialog)
         help_menu.addAction(about_action)
-        
+
+        log_menu = help_menu.addMenu("Лог")
+        act_open = QAction("Просмотреть лог", self)
+        act_open.triggered.connect(self._open_log_file)
+        log_menu.addAction(act_open)
+
+        act_folder = QAction("Открыть папку с логами", self)
+        act_folder.triggered.connect(self._open_log_folder)
+        log_menu.addAction(act_folder)
+
+        log_menu.addSeparator()
+
+        act_clear = QAction("Очистить лог", self)
+        act_clear.triggered.connect(self._clear_log)
+        log_menu.addAction(act_clear)
+
         # Инициализируем обновление меню результатов
         self.update_results_menu()
+
+    def _open_log_file(self):
+        path = get_log_file()
+        if not os.path.exists(path):
+            QMessageBox.information(self, "Лог", "Файл лога пока не создан.")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+
+    def _open_log_folder(self):
+        QDesktopServices.openUrl(QUrl.fromLocalFile(get_log_dir()))
+
+
+    def _clear_log(self):
+        path = get_log_file()
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("")  # обнуляем файл
+            QMessageBox.information(self, "Лог", "Файл лога очищен.")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось очистить лог:\n{e}")
 #=======================
     def open_edit_stages_dialog(self):
         """Открытие диалога редактирования этапов"""
@@ -36995,6 +37028,31 @@ def main():
 
 
 if __name__ == "__main__":
+
+    import sys
+    from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QMessageBox
+    from PyQt5.QtGui import QDesktopServices
+    from PyQt5.QtCore import QUrl
+
+    from log_setup import setup_logging, get_log_file, get_log_dir
+
+    app = QApplication(sys.argv)
+
+    # ВАЖНО: org и app задать ДО setup_logging(), иначе QStandardPaths
+    # вернёт путь по умолчанию и логи окажутся в неожиданном месте
+    app.setOrganizationName("TT")
+    app.setApplicationName("TT_Competitions")
+
+    logger = setup_logging()
+    logger.info("=== Запуск приложения ===")
+
+    try:
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec_())
+    except Exception:
+        logger.critical("Сбой при запуске приложения", exc_info=True)
+        raise
 
     def resource_path(relative_path):
         """Возвращает путь к ресурсу, работая и в IDE, и в собранном exe."""
