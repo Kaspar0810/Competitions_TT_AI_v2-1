@@ -392,9 +392,19 @@ class GskMember(BaseModel):
     
 # Функция для подключения к БД
 def connect_db():
+    """
+    Подключение к БД.
+    Если база не создана — не падаем «Unknown database»,
+    а логируем и пробрасываем дальше, чтобы main() успел показать диалог.
+    """
     if db.is_closed():
-        db.connect()
+        try:
+            db.connect(reuse_if_open=True)
+        except Exception as e:
+            print(f"[connect_db] {type(e).__name__}: {e}")
+            raise
     return db
+
 
 def close_db():
     if not db.is_closed():
