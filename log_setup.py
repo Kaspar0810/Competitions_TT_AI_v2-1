@@ -27,6 +27,12 @@ def setup_logging() -> logging.Logger:
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
+    # Приглушаем очень болтливые сторонние логгеры
+    logging.getLogger("peewee").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+
     # На случай повторного вызова — очищаем старые обработчики
     for h in logger.handlers[:]:
         logger.removeHandler(h)
