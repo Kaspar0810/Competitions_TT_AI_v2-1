@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
     QDialog, QProgressBar, QFileDialog, QMenu, QProgressDialog, QTextEdit, QSpinBox, QDoubleSpinBox
 )
 from PyQt5.QtWidgets import QGridLayout  # Добавьте в импорт
-from PyQt5.QtCore import Qt, QDate, QSize, pyqtSignal, QThread
-from PyQt5.QtGui import QFont, QColor, QIntValidator, QDrag
+from PyQt5.QtCore import QUrl, Qt, QDate, QSize, pyqtSignal, QThread
+from PyQt5.QtGui import QDesktopServices, QFont, QColor, QIntValidator, QDrag
 from PyQt5.QtCore import QTimer, QTime
 from PyQt5.QtWidgets import QCompleter
 from PyQt5.QtCore import QStringListModel
@@ -39,6 +39,7 @@ from reportlab.lib.colors import Color, black, blue
 import tempfile
 import pymysql
 
+from log_setup import get_log_dir, get_log_file
 from models import connect_db, close_db
 from models_qt import (
     PlayersTableModel, TeamsTableModel, ResultsTableModel, DoublesResultsTableModel,
@@ -58,7 +59,7 @@ import math
 import re
 import random
 
-import edit_stage
+# import edit_stage
 
 import subprocess
 import openpyxl as op
@@ -68,14 +69,14 @@ from collections import defaultdict
 from PyPDF2 import PdfMerger 
 
 # В основной программе
-import auto_choice_group
-import manual_choice
+# import auto_choice_group
+# import manual_choice
 import db_setup
-import BackupManagementDialog
+# import BackupManagementDialog
 
 from db_setup import setup_database
-from import_initial_data import InitialDataImportDialog
-from begunok_full import BegunokPDF
+# from import_initial_data import InitialDataImportDialog
+# from begunok_full import BegunokPDF
 
 
 import logging
@@ -86,7 +87,50 @@ from logging.handlers import RotatingFileHandler
 from PyQt5.QtCore import QStandardPaths
 
 # ======================== 1-й вариан расписания ======
+import os
+import sys
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.pdfmetrics import registerFontFamily
 
+
+def resource_path(relative_path):
+    """Возвращает путь к ресурсу, работая и в IDE, и в собранном exe."""
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+# ── Регистрируем шрифты ОДИН РАЗ при импорте ──
+_font_dir = "font"
+
+for name, file in [
+    ("DejaVuSans",            "DejaVuSans.ttf"),
+    ("DejaVuSans-Bold",       "DejaVuSans-Bold.ttf"),
+    ("DejaVuSerif",           "DejaVuSerif.ttf"),
+    ("DejaVuSerif-Bold",      "DejaVuSerif-Bold.ttf"),
+    ("DejaVuSerif-Italic",    "DejaVuSerif-Italic.ttf"),
+]:
+    path = resource_path(os.path.join(_font_dir, file))
+    try:
+        pdfmetrics.registerFont(TTFont(name, path))
+    except Exception as e:
+        print(f"Не удалось зарегистрировать {name}: {e}")
+
+# ── Семейство шрифтов — чтобы Paragraph/PS с DejaVuSerif-Bold не падал ──
+try:
+    registerFontFamily(
+        'DejaVuSerif',
+        normal='DejaVuSerif',
+        bold='DejaVuSerif-Bold',
+        italic='DejaVuSerif-Italic',
+        boldItalic='DejaVuSerif-Bold',   # если BoldItalic нет — используем Bold
+    )
+except Exception as e:
+    print(f"registerFontFamily: {e}")
+    
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -10638,6 +10682,7 @@ class MainWindow(QMainWindow):
 #=======================
     def open_edit_stages_dialog(self):
         """Открытие диалога редактирования этапов"""
+        import edit_stage
         if not self.current_title_id:
             QMessageBox.warning(self, "Ошибка", "Сначала выберите соревнование")
             return
@@ -10653,6 +10698,7 @@ class MainWindow(QMainWindow):
 #=========================
     def open_backup_management(self):
         """Открыть диалог управления бэкапами"""
+        import BackupManagementDialog
         dialog = BackupManagementDialog.BackupManagementDialog(self, backup_dir="backup_db")
         dialog.exec_()  # модальный диалог
 
@@ -17740,6 +17786,7 @@ class MainWindow(QMainWindow):
 # ========== вариант без игроков в финале ==
     def auto_drawing_for_stage(self, stage):
         """Автоматическая жеребьевка для указанного этапа"""
+        import auto_choice_group
         try:
             systems = System.select().where(
                 (System.title_id == self.current_title_id) &
@@ -17811,6 +17858,7 @@ class MainWindow(QMainWindow):
 # ================================
     def open_manual_net_draw(self, stage):
         """Открытие диалога ручной жеребьевки сетки"""
+        import manual_choice
         if not self.current_title_id:
             QMessageBox.warning(self, "Ошибка", "Сначала выберите соревнование")
             return
@@ -17821,6 +17869,7 @@ class MainWindow(QMainWindow):
 #==========================================
     def manual_drawing_for_stage(self, stage):
         """Ручная жеребьевка для указанного этапа"""
+        import manual_choice
         from models import Player, Coach
         athletes = []
 
@@ -18891,8 +18940,8 @@ class MainWindow(QMainWindow):
             styles = getSampleStyleSheet()
             title_style = PS("TitleStyle", fontSize=14, fontName="DejaVuSerif-Bold",
                             alignment=1, spaceAfter=20, textColor=colors.darkblue)
-            header_style = PS("HeaderStyle", fontSize=10, fontName="DejaVuSerif-Bold",
-                            alignment=1, textColor=colors.white)
+            # header_style = PS("HeaderStyle", fontSize=10, fontName="DejaVuSerif-Bold",
+            #                 alignment=1, textColor=colors.white)
 
             elements = []
 
@@ -32415,6 +32464,7 @@ class MainWindow(QMainWindow):
     def manual_one_table_drawing(self, system):
         """Ручная жеребьевка для одной таблицы"""
         from models import Player, Coach
+        import manual_choice
         
         # Получаем список игроков
         players = Player.select().where((Player.title_id == self.current_title_id) & (Player.sex == self.current_sex)).order_by(Player.rank.desc())
@@ -37031,31 +37081,143 @@ class ChessboardDialog(QDialog):
             "tables":    self._parse_tables(self.tables_edit.text()),
         }
 
-# def main():  
-#     # Сначала проверяем БД
+
+# def main():
+    import traceback
+#     # from PyQt5.QtWidgets import QMessageBox
+
+#     try:
+#         app = QApplication(sys.argv)
+
+#         if not setup_database():
+#             QMessageBox.critical(
+#                 None, "Запуск невозможен",
+#                 "Без настроенной базы данных работа невозможна.\n"
+#                 "Программа будет закрыта.")
+#             sys.exit(1)
+
+#         # --- проверка/предложение импорта справочников ---
+#         try:
+#             from models import (db, Region, City, Coach,
+#                                 Patronymic, Players_full)
+#             db.connect(reuse_if_open=True)
+
+#             flags = {
+#                 "Регионы":         Region.select().count() > 0,
+#                 "Города":          City.select().count() > 0,
+#                 "Тренеры":         Coach.select().count() > 0,
+#                 "Отчества":        Patronymic.select().count() > 0,
+#                 "Players_full":    Players_full.select().count() > 0,
+#             }
+#             if not all(flags.values()):
+#                 lines = "\n".join(
+#                     f"  • {k}: {'✔' if v else '— нужно загрузить'}"
+#                     for k, v in flags.items()
+#                 )
+#                 reply = QMessageBox.question(
+#                     None, "Первичная настройка справочников",
+#                     "База данных готова.\n\n"
+#                     f"Состояние справочников:\n{lines}\n\n"
+#                     "Загрузить недостающие справочники сейчас?\n"
+#                     "(можно позже — меню «База данных → "
+#                     "📚 Импорт справочников»)",
+#                     QMessageBox.Yes | QMessageBox.No,
+#                     QMessageBox.Yes)
+#                 if reply == QMessageBox.Yes:
+#                     from import_initial_data import InitialDataImportDialog
+#                     dlg = InitialDataImportDialog()
+#                     dlg.exec_()
+#         except Exception as e:
+#             print(f"Проверка справочников: {e}")
+#             traceback.print_exc()
+
+#         window = MainWindow()
+#         window.show()
+#         sys.exit(app.exec_())
+
+#     except SystemExit:
+#         raise
+#     except Exception as e:
+#         traceback.print_exc()
+#         try:
+#             QMessageBox.critical(
+#                 None, "Критическая ошибка при запуске",
+#                 f"Программа не смогла запуститься:\n\n"
+#                 f"{type(e).__name__}: {e}\n\n"
+#                 f"Подробный traceback сохранён в stdout.")
+#         except Exception:
+#             pass
+#         sys.exit(2)
+
+# if __name__ == "__main__":
+
+#     import sys
+#     from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QMessageBox
+#     from PyQt5.QtGui import QDesktopServices
+#     from PyQt5.QtCore import QUrl
+#     from log_setup import setup_logging, get_log_file, get_log_dir
+
 #     app = QApplication(sys.argv)
 
-#     if not setup_database():
-#         sys.exit(1)
+#     # ВАЖНО: org и app задать ДО setup_logging(), иначе QStandardPaths
+#     # вернёт путь по умолчанию и логи окажутся в неожиданном месте
+#     app.setOrganizationName("TT")
+#     app.setApplicationName("TT_Competitions")
 
-#     window = MainWindow()
+#     logger = setup_logging()
+#     logger.info("=== Запуск приложения ===")
 
-#     window.show()
 
-#     sys.exit(app.exec_())
+#     try:
+#         window = MainWindow()
+#         window.show()
+#         sys.exit(app.exec_())
+#     except Exception:
+#         logger.critical("Сбой при запуске приложения", exc_info=True)
+#         raise
 
+#     def resource_path(relative_path):
+#         """Возвращает путь к ресурсу, работая и в IDE, и в собранном exe."""
+#         try:
+#             base_path = sys._MEIPASS  # папка, куда PyInstaller распаковывает данные
+#         except AttributeError:
+#             base_path = os.path.abspath(".")
+#         return os.path.join(base_path, relative_path)
+
+
+#     font_path = resource_path(os.path.join("font", "DejaVuSans.ttf"))
+#     pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
+#     font_path = resource_path(os.path.join("font", "DejaVuSans-Bold.ttf"))
+#     pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
+#     font_path = resource_path(os.path.join("font", "DejaVuSerif.ttf"))
+#     pdfmetrics.registerFont(TTFont('DejaVuSerif', font_path))
+#     font_path = resource_path(os.path.join("font", "DejaVuSerif-Bold.ttf"))
+#     pdfmetrics.registerFont(TTFont('DejaVuSerif-Bold', font_path))
+#     font_path = resource_path(os.path.join("font", "DejaVuSerif-Italic.ttf"))
+#     pdfmetrics.registerFont(TTFont('DejaVuSerif-Italic', font_path))
+
+
+#     main()
 def main():
     import traceback
-    # from PyQt5.QtWidgets import QMessageBox
+    from PyQt5.QtWidgets import QApplication, QMessageBox
 
     try:
         app = QApplication(sys.argv)
+        app.setOrganizationName("TT")
+        app.setApplicationName("TT_Competitions")
+
+        # логгер
+        try:
+            from log_setup import setup_logging
+            setup_logging().info("=== Запуск приложения ===")
+        except Exception as e:
+            print(f"log_setup: {e}")
 
         if not setup_database():
             QMessageBox.critical(
                 None, "Запуск невозможен",
-                "Без настроенной базы данных работа невозможна.\n"
-                "Программа будет закрыта.")
+                "Без настроенной базы данных работа невозможна.")
             sys.exit(1)
 
         # --- проверка/предложение импорта справочников ---
@@ -37104,58 +37266,10 @@ def main():
         try:
             QMessageBox.critical(
                 None, "Критическая ошибка при запуске",
-                f"Программа не смогла запуститься:\n\n"
-                f"{type(e).__name__}: {e}\n\n"
-                f"Подробный traceback сохранён в stdout.")
+                f"{type(e).__name__}: {e}")
         except Exception:
             pass
         sys.exit(2)
 
 if __name__ == "__main__":
-
-    import sys
-    from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QMessageBox
-    from PyQt5.QtGui import QDesktopServices
-    from PyQt5.QtCore import QUrl
-
-    from log_setup import setup_logging, get_log_file, get_log_dir
-
-    app = QApplication(sys.argv)
-
-    # ВАЖНО: org и app задать ДО setup_logging(), иначе QStandardPaths
-    # вернёт путь по умолчанию и логи окажутся в неожиданном месте
-    app.setOrganizationName("TT")
-    app.setApplicationName("TT_Competitions")
-
-    logger = setup_logging()
-    logger.info("=== Запуск приложения ===")
-
-    try:
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec_())
-    except Exception:
-        logger.critical("Сбой при запуске приложения", exc_info=True)
-        raise
-
-    def resource_path(relative_path):
-        """Возвращает путь к ресурсу, работая и в IDE, и в собранном exe."""
-        try:
-            base_path = sys._MEIPASS  # папка, куда PyInstaller распаковывает данные
-        except AttributeError:
-            base_path = os.path.abspath(".")
-        return os.path.join(base_path, relative_path)
-
-    font_path = resource_path(os.path.join("font", "DejaVuSans.ttf"))
-    pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
-    font_path = resource_path(os.path.join("font", "DejaVuSans-Bold.ttf"))
-    pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
-    font_path = resource_path(os.path.join("font", "DejaVuSerif.ttf"))
-    pdfmetrics.registerFont(TTFont('DejaVuSerif', font_path))
-    font_path = resource_path(os.path.join("font", "DejaVuSerif-Bold.ttf"))
-    pdfmetrics.registerFont(TTFont('DejaVuSerif-Bold', font_path))
-    font_path = resource_path(os.path.join("font", "DejaVuSerif-Italic.ttf"))
-    pdfmetrics.registerFont(TTFont('DejaVuSerif-Italic', font_path))
-
-
-    main()
+    main() 
