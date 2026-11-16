@@ -20944,6 +20944,691 @@ class MainWindow(QMainWindow):
         #                     print(f"write_in_setka: 3rd place: {e}")
         return data
 
+
+# ===== вариант увеличения фамилий на сетках
+    # def write_in_setka(self, data, stage, first_mesto, table, posev_data):
+    #     """
+    #     Заполняет олимпийскую сетку данными из таблицы Result.
+
+    #     data        : список списков (сама сетка).
+    #                 > 0 — номер матча,
+    #                 < 0 — ячейка, куда идёт проигравший матча N.
+    #     stage       : этап соревнования (для фильтра Result).
+    #     first_mesto : начальное место в финале (если нужен — используйте при фильтрации).
+    #     table       : вид олимпийской сетки.
+    #     posev_data  : dict {id_игрока: ФИО} с жеребьёвки.
+
+    #     Возвращает изменённый data (in-place).
+    #     """
+    #     pairs_list = ["Мужские пары", "Женские пары", "Смешанные пары"]
+       
+    #     is_pairs = stage in pairs_list
+  
+    #     if stage in pairs_list:
+    #         player = Players_double.select().where(Players_double.title_id == self.current_title_id)
+    #     else:  
+    #         player = Player.select().where((Player.title_id == self.current_title_id) & (Player.sex == self.current_sex))
+    # # ==== словарь или список номер встреч за места
+    #     place_list = self.number_match_net_for_place(table) 
+
+    #     # Определяем no_game и полуфиналы для сетки
+    #     no_game = ""
+    #     try:
+    #         system_obj = System.get_or_none(
+    #             (System.title_id == self.current_title_id) &
+    #             (System.sex == self.current_sex) &
+    #             (System.stage == stage)
+    #         )
+    #         if system_obj:
+    #             no_game = (system_obj.no_game or "").strip()
+    #     except Exception:
+    #         pass
+
+    #     semifinal_matches = []
+    #     if no_game == "3":
+    #         if table in ("setka_64"):
+    #             semifinal_matches = [61, 62]
+    #         elif table in ("setka_32", "setka_32_full", "setka_32_2"):
+    #             semifinal_matches = [29, 30]
+    #         elif table in ("setka_16", "setka_16_full", "setka_16_2"):
+    #             semifinal_matches = [13, 14]
+    #         elif table in ("setka_8", "setka_8_full", "setka_8_2"):
+    #             semifinal_matches = [5, 6] 
+    # # ---------- 0. Заполняем нулевой столбец игроками первого посева ----------
+    #     # ind = 0
+    #     # for row in data:
+    #     #     if not row:
+    #     #         continue
+    #     #     pos = row[0]
+    #     #     if pos != "":
+    #     #         if int(pos) in posev_data:
+    #     #             info = posev_data[int(pos)]
+    #     #             if stage in pairs_list:
+    #     #                 fio_city =  info.get("name_city")
+    #     #                 fio_city = fio_city.replace("/", "\n")
+    #     #                 data[ind][1] = fio_city                 
+    #     #             else:    
+    #     #                 data[ind][1] = info.get("name_city")
+    #     #             ind += 1
+    #     #     else:
+    #     #         ind += 1
+    #             # ---------- 0. Заполняем нулевой столбец игроками первого посева ----------
+    #     def _split_fio_city(name_city):
+    #         """
+    #         'ИВАНОВ Иван Иванович/Москва' → 'ИВАНОВ Иван Иванович\\nМосква'
+    #         Если '/' нет — просто ФИО.
+    #         """
+    #         if not name_city:
+    #             return ""
+    #         s = str(name_city).strip()
+    #         if "/" in s:
+    #             fio, city = s.split("/", 1)
+    #             return f"{fio.strip()}\n{city.strip()}"
+    #         return s
+
+    #     ind = 0
+    #     for row in data:
+    #         if not row:
+    #             continue
+    #         pos = row[0]
+    #         if pos != "":
+    #             if int(pos) in posev_data:
+    #                 info = posev_data[int(pos)]
+    #                 name_city = info.get("name_city") or ""
+    #                 data[ind][1] = _split_fio_city(name_city)
+    #                 ind += 1
+    #         else:
+    #             ind += 1
+    #     # ---------- 1. Загружаем результаты ----------
+    #     query = Result.select().where((Result.title_id == self.current_title_id) & (Result.sex == self.current_sex)) 
+    #     if stage is not None:
+    #         query = query.where(Result.number_group == stage)
+    
+    #     results_by_match = {r.tours: r for r in query}
+
+    #     # ---------- 2. Индексируем ячейки с отрицательными числами ----------
+    #     loser_cells = {}
+    #     for row_idx, row in enumerate(data):
+    #         for col_idx, cell in enumerate(row):
+    #             try:
+    #                 n = int(cell)
+    #             except (TypeError, ValueError):
+    #                 continue
+    #             if n < 0:
+    #                 loser_cells.setdefault(n, []).append((row_idx, col_idx))
+
+    #     # ---------- 3. Основной проход по номерам матчей ----------
+    #     for row_idx, row in enumerate(data):
+    #         for col_idx, cell in enumerate(row):
+    #             if col_idx == 0:
+    #                 continue
+    #             try:
+    #                 match_num = int(cell)
+    #             except (TypeError, ValueError):
+    #                 continue
+    #             if match_num <= 0:
+    #                 continue  # это не номер матча
+
+    #             result = results_by_match.get(str(match_num))
+
+    #             if result.winner is None:
+    #                 continue  # матч ещё не сыгран
+
+    #             winner_name, loser_name, score_str = self._parse_result(result, posev_data)
+
+    #             # 3.1. Победитель — в ту же строку, столбец + 1
+    #             if col_idx + 1 < len(row):
+    #                 if table == "setka_32_2" and match_num == 60:
+    #                     data[row_idx][col_idx - 1] = winner_name
+    #                 elif table == "setka_16_2" and match_num == 28:
+    #                     data[row_idx][col_idx - 1] = winner_name
+    #                 elif table == "setka_64" and match_num == 61:
+    #                     data[59][9] = winner_name
+    #                     data[row_idx][col_idx + 1] = winner_name
+    #                 elif table == "setka_64" and match_num == 62:
+    #                     data[61][9] = winner_name
+    #                     data[row_idx][col_idx + 1] = winner_name    
+    #                 else:
+    #                     data[row_idx][col_idx + 1] = winner_name
+    #             # 3.2. Счёт — под победителем (следующая строка, тот же столбец)
+    #             if (row_idx + 1 < len(data)
+    #                     and col_idx + 1 < len(data[row_idx + 1])):
+    #                 if table == "setka_32_2" and match_num == 60:
+    #                     data[row_idx + 1][col_idx - 1] = score_str
+    #                 elif table == "setka_16_2" and match_num == 28:
+    #                     data[row_idx + 1][col_idx - 1] = score_str
+    #                 else:
+    #                     data[row_idx + 1][col_idx + 1] = score_str
+
+    #             # ---- переопределение координат проигравших полуфиналов ----
+    #             # при no_game == "3" проигравшие полуфиналов идут СРАЗУ на место 3-го
+    #             # (не в матч 32), поэтому задаём им отдельные ячейки.
+    #             # ВАЖНО: не перезаписываем loser_cells целиком, а добавляем координаты.
+    #             if no_game == "3" and match_num in semifinal_matches:
+    #                 if table in ("setka_64"):
+    #                     # в 64-сетке проигравшие 61/62 → строки 124 и 62, столбец 10
+    #                     semifinal_target = {
+    #                         61: (124, 10),
+    #                         62: (128, 10),
+    #                     }
+    #                     # pass
+    #                 elif table in ("setka_32", "setka_32_full"):
+    #                     # в 32-сетке проигравшие 29/30 → строки 60 и 62, столбец 9
+    #                     semifinal_target = {
+    #                         29: (17, 8),
+    #                         30: (49, 8),
+    #                     }
+    #                 elif table in ("setka_16", "setka_16_full"):
+    #                     # 16-сетка: строки и столбцы надо проверить по вашей разметке
+    #                     # предполагаю: победитель пишется в col_idx+1,
+    #                     # значит проигравший в ту же строку, тот же столбец
+    #                     semifinal_target = {
+    #                         13: (29, 8),
+    #                         14: (31, 8),
+    #                     }
+    #                 elif table in ("setka_8", "setka_8_full"):
+    #                     semifinal_target = {
+    #                         5: (14, 6),
+    #                         6: (16, 6),
+    #                     }
+    #                 else:
+    #                     semifinal_target = {}
+
+    #                 if match_num in semifinal_target:
+    #                     r, c = semifinal_target[match_num]
+    #                     # переопределяем только для ЭТОГО матча, остальные не трогаем
+    #                     loser_cells[-match_num] = [(r, c)]
+
+    #             for l_row, l_col in loser_cells.get(-match_num, []):
+    #                 if l_col + 1 < len(data[l_row]):
+    #                     if table == "setka_32_2" and match_num == 60:
+    #                         data[l_row][l_col - 1] = loser_name
+    #                     elif table == "setka_16_2" and match_num == 28:
+    #                         data[l_row][l_col - 1] = loser_name
+    #                     else:
+    #                         data[l_row][l_col + 1] = loser_name
+
+    #             # если встреча за место, то записывает DB ====
+    #             if match_num in place_list:
+    #                 players = [winner_name, loser_name]
+    #                 result = self.build_place_matches(first_mesto, place_list)
+    #                 result_match = result[match_num]
+    #                 k = 0
+    #                 for name in players:
+    #                     if not name or name == "X":
+    #                         k += 1
+    #                         continue
+
+    #                     # ищем player_id по posev_data
+    #                     player_id = None
+    #                     for info in posev_data.values():
+    #                         if info.get("name") == name \
+    #                                 or info.get("name_city") == name:
+    #                             player_id = info.get("player_id")
+    #                             break
+    #                     if not player_id:
+    #                         k += 1
+    #                         continue
+
+    #                     place = result_match[k]
+
+    #                     if is_pairs:
+    #                         # ---------- ПАРЫ ----------
+    #                         # 1. Choice_double_player.mesto_final
+    #                         try:
+    #                             cdp = Choice_double_player.get_or_none(
+    #                                 (Choice_double_player.title_id == self.current_title_id) &
+    #                                 (Choice_double_player.player_double_id == player_id)
+    #                             )
+    #                             if cdp:
+    #                                 cdp.mesto_final = place
+    #                                 cdp.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: Choice_double_player: {e}")
+
+    #                         # 2. Players_double.mesto
+    #                         try:
+    #                             pair = Players_double.get_or_none(
+    #                                 Players_double.id == player_id
+    #                             )
+    #                             if pair:
+    #                                 pair.mesto = place
+    #                                 pair.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: Players_double: {e}")
+    #                     else:
+    #                         # ---------- ЛИЧНЫЕ ----------
+    #                         try:
+    #                             choice = Choice.get_or_none(
+    #                                 (Choice.title_id == self.current_title_id) &
+    #                                 (Choice.player_choice_id == player_id)
+    #                             )
+    #                             if choice:
+    #                                 choice.mesto_final = place
+    #                                 choice.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: Choice: {e}")
+
+    #                         try:
+    #                             pl = Player.get_or_none(Player.id == player_id)
+    #                             if pl:
+    #                                 pl.mesto = place
+    #                                 pl.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: Player: {e}")
+
+    #                     k += 1
+    #             # ---- 3-е место для проигравших полуфиналов (no_game == "3") ----        
+    #             if no_game == "3" and match_num in semifinal_matches and loser_name:
+    #                 player_id = next(
+    #                     (info["player_id"] for info in posev_data.values()
+    #                      if info.get("name") == loser_name
+    #                      or info.get("name_city") == loser_name),
+    #                     None
+    #                 )
+    #                 if player_id:
+    #                     if is_pairs:
+    #                         # ---------- ПАРЫ ----------
+    #                         try:
+    #                             cdp = Choice_double_player.get_or_none(
+    #                                 (Choice_double_player.title_id == self.current_title_id) &
+    #                                 (Choice_double_player.player_double_id == player_id)
+    #                             )
+    #                             if cdp:
+    #                                 cdp.mesto_final = 3
+    #                                 cdp.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: 3rd place Choice_double_player: {e}")
+
+    #                         try:
+    #                             pair = Players_double.get_or_none(
+    #                                 Players_double.id == player_id
+    #                             )
+    #                             if pair:
+    #                                 pair.mesto = 3
+    #                                 pair.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: 3rd place Players_double: {e}")
+    #                     else:
+    #                         # ---------- ЛИЧНЫЕ ----------
+    #                         try:
+    #                             choice = Choice.get_or_none(
+    #                                 (Choice.title_id == self.current_title_id) &
+    #                                 (Choice.player_choice_id == player_id)
+    #                             )
+    #                             if choice:
+    #                                 choice.mesto_final = 3
+    #                                 choice.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: 3rd place Choice: {e}")
+
+    #                         try:
+    #                             pl = Player.get_or_none(Player.id == player_id)
+    #                             if pl:
+    #                                 pl.mesto = 3
+    #                                 pl.save()
+    #                         except Exception as e:
+    #                             print(f"write_in_setka: 3rd place Player: {e}")
+    #     #         # ---- 3-е место для проигравших полуфиналов (no_game == "3") ----
+    #     #         if no_game == "3" and match_num in semifinal_matches and loser_name:
+    #     #             player_id = next(
+    #     #                 (info["player_id"] for info in posev_data.values()
+    #     #                  if info.get("name") == loser_name
+    #     #                  or info.get("name_city") == loser_name),
+    #     #                 None
+    #     #             )
+    #     #             if player_id:
+    #     #                 try:
+    #     #                     choice = Choice.get_or_none(
+    #     #                         (Choice.title_id == self.current_title_id) &
+    #     #                         (Choice.player_choice == player_id)
+    #     #                     )
+    #     #                     if choice:
+    #     #                         choice.mesto_final = 3
+    #     #                         choice.save()
+    #     #                     player_obj = Player.get_or_none(Player.id == player_id)
+    #     #                     if player_obj:
+    #     #                         player_obj.mesto = 3
+    #     #                         player_obj.save()
+    #     #                 except Exception as e:
+    #     #                     print(f"write_in_setka: 3rd place: {e}")
+    #     return data
+
+    # def _parse_result(self, result, posev_data):
+    #         """
+    #         Достаёт ФИО победителя/проигравшего и строку со счётом.
+    #         Подстройте имена полей под свою модель Result.
+    #         """
+
+    #         def fio(player):
+    #             if player is None:
+    #                 return ""
+
+    #             return posev_data.get(player, str(player))
+
+    #         p1, p2 = result.player1, result.player2
+
+    #         if p1 == "" and p2 == "":
+    #             sets = ""
+    #             score = ""
+    #         else:
+    #             sets = result.score_win if result.score_win != 'В : П' else "" 
+    #             score = result.score_in_game                       
+
+    #         def _short_name(name_city):
+    #             """
+    #             'ИВАНОВ Иван Иванович/Москва' →
+    #                 'ИВАНОВ\nИван Иванович'
+    #             (фамилия в 1-й строке, имя+отчество — во 2-й)
+    #             Если иначе — возвращает как есть.
+    #             """
+    #             if not name_city:
+    #                 return ""
+    #             s = str(name_city).strip()
+    #             # отделяем город
+    #             if "/" in s:
+    #                 fio_part = s.split("/", 1)[0].strip()
+    #             else:
+    #                 fio_part = s
+    #             parts = fio_part.split()
+    #             if len(parts) >= 2:
+    #                 surname = parts[0]
+    #                 rest = " ".join(parts[1:])
+    #                 return f"{surname}\n{rest}"
+    #             return fio_part
+
+    #         if result.winner == p1:
+    #             winner_name = _short_name(fio(p1))
+    #             loser_name  = _short_name(fio(p2))
+    #             score_str = f"{score} {sets}"
+    #         else:
+    #             winner_name = _short_name(fio(p2))
+    #             loser_name  = _short_name(fio(p1))
+    #             score_str = f"{score} {sets}"
+
+    #         return winner_name, loser_name, score_str
+    #         # return f"{surname}\n{rest}"
+
+    def setka_32_full_made(self, fin, posev_data):
+            """сетка на 32 с розыгрышем всех мест"""
+            from reportlab.platypus import Table
+
+            table = "setka_32_full"
+
+            pairs_list = ["Мужские пары", "Женские пары", "Смешанные пары"]
+
+            sex = "M" if self.current_sex == "man" else "W"
+
+            # Папка для сохранения
+            pdf_dir = "table_pdf"
+            if not os.path.exists(pdf_dir):
+                os.makedirs(pdf_dir)
+
+            elements = []
+            style = []
+            data = []
+            column = ['']
+            column_count = column * 13
+            final = fin
+            titles = Title.select().where(Title.id == self.current_title_id).get()
+            sredi = titles.sredi
+            result = self.gamer_on_title(sredi)
+            gamer = result[0]
+
+            finals = System.select().where(
+                (System.title_id == self.current_title_id) &
+                (System.stage == fin) &
+                (System.sex == self.current_sex)
+                ).get()
+            max_pl = finals.max_player # максимальное число игроков в сетке
+
+            if fin in pairs_list:
+                first_mesto = 1
+                last_mesto = 3
+                fin_title = f'Финальные соревнования.(с 1 по 3 место)' # титул на таблице
+            elif fin == "Чистая сетка":
+                first_mesto = 1
+                last_mesto = first_mesto + max_pl - 1
+                fin_title = ""    
+            else:
+                first_mesto = self.get_final_start_place(fin)
+                last_mesto = max_pl if fin == "1-й финал" else first_mesto + max_pl - 1
+                fin_title = f'Финальные соревнования.({first_mesto}-{last_mesto} место)' # титул на таблице
+        
+            strok = 207
+            for i in range(0, strok):
+                # column_count[12] = i  # нумерация 10 столбца для удобного просмотра таблицы
+                list_tmp = column_count.copy()
+                data.append(list_tmp)
+            # ========= нумерация встреч сетки ==========
+            y = 0
+            for i in range(1, 65, 2):
+                y += 1
+                data[i + 1][0] = str(y)  # рисует начальные номера таблицы 1-32 (номер столбца, номер строки)
+            number_of_game = self.draw_num(row_n=3, row_step=2, col_n=2, number_of_columns=5, number_of_game=1, player=32, data=data) # рисует номера встреч 1-32
+            data[60][8] = str((number_of_game - 3) * -1)  # номера проигравших 29
+            data[62][8] = str((number_of_game - 2) * -1)  # номера проигравших 30
+            data[55][10] = str((number_of_game - 1) * -1)  # номер проигравшего финал (-31)
+            data[61][10] = str(number_of_game)  # создание номеров встреч 32
+            data[66][10] = str((number_of_game) * -1)  # номер проигравшего финал (-32)
+            #===== 2-я страница =========
+            y = 0
+            for i in range(78, 89, 10):
+                y += 1
+                data[i][8] = str((y + 34) * -1)  # номер проигравшего финал (-35, -36)
+            y = 0
+            for i in range(101, 112, 9):
+                y += 1
+                data[i][8] = str((y + 42) * -1)  # номер проигравшего финал (-43, -44)
+            y = 0
+            for i in range(120, 131, 10):
+                y += 1
+                data[i][8] = str((y + 46) * -1)  # номер проигравшего финал (-47, -48)
+            y = 0
+            for i in range(172, 187, 14):
+                y += 4
+                data[i][10] = str((y + 60) * -1)  # номер проигравшего финал (-64, -68)
+            y = 0
+            for i in range(198, 206, 7):
+                y += 4
+                data[i][10] = str((y + 72) * -1)  # номер проигравшего финал (-76, -80)
+            data[178][8] = str(-67)  # номер проигравшего финал (-67)
+            data[191][6] = str(-75)  # номер проигравшего финал (-75)
+            data[164][8] = str(-63)  # номер проигравшего финал (-63)
+            data[203][4] = str(-79)  # номер проигравшего финал (-79)
+
+            number_of_game = self.draw_num(row_n=72, row_step=2, col_n=6, number_of_columns=2, number_of_game=33, player=4, data=data) # рисует номера встреч 1-32
+            data[84][8] = str(number_of_game)  # создание номеров встреч 36
+            number_of_game = self.draw_num(row_n=89, row_step=2, col_n=4, number_of_columns=3, number_of_game=37, player=8, data=data) # рисует номера встреч 1-32
+            data[106][8] = str(number_of_game)
+            number_of_game = self.draw_num(row_n=114, row_step=2, col_n=6, number_of_columns=2, number_of_game=45, player=4, data=data) # рисует номера встреч 1-32
+            data[126][8] = str(number_of_game)  # создание номеров встреч 48
+            self.draw_num_lost(row_n=72, row_step=2, col_n=4, number_of_game=25, player=4, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=84, row_step=2, col_n=6, number_of_game=33, player=2, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=89, row_step=2, col_n=2, number_of_game=17, player=8, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=106, row_step=2, col_n=6, number_of_game=41, player=2, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=114, row_step=2, col_n=4, number_of_game=37, player=4, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=126, row_step=2, col_n=6, number_of_game=45, player=2, data=data) # номера минус проигравшие встречи -1 -16
+        #========== 3-я страница ==============
+            number_of_game = self.draw_num(row_n=140, row_step=2, col_n=2, number_of_columns=4, number_of_game=49, player=16, data=data) # рисует номера встреч 1-32
+            data[168][10] = str(number_of_game)  # создание номеров встреч 64
+            number_of_game = self.draw_num(row_n=172, row_step=2, col_n=6, number_of_columns=2, number_of_game=65, player=4, data=data) # рисует номера встреч 1-32
+            data[182][10] = str(number_of_game)  # создание номеров встреч 68
+            number_of_game = self.draw_num(row_n=179, row_step=2, col_n=2, number_of_columns=3, number_of_game=69, player=8, data=data) # рисует номера встреч 1-32
+            data[194][10] = str(number_of_game)
+            number_of_game = self.draw_num(row_n=197, row_step=2, col_n=2, number_of_columns=2, number_of_game=77, player=4, data=data) # рисует номера встреч 1-32
+            data[201][10] = str(number_of_game)  # создание номеров встреч 68
+            self.draw_num_lost(row_n=140, row_step=2, col_n=0, number_of_game=1, player=16, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=172, row_step=2, col_n=4, number_of_game=57, player=4, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=179, row_step=2, col_n=0, number_of_game=49, player=8, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=197, row_step=2, col_n=0, number_of_game=69, player=4, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=168, row_step=2, col_n=8, number_of_game=61, player=2, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=182, row_step=2, col_n=8, number_of_game=65, player=2, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=194, row_step=2, col_n=8, number_of_game=73, player=2, data=data) # номера минус проигравшие встречи -1 -16
+            self.draw_num_lost(row_n=201, row_step=2, col_n=8, number_of_game=77, player=2, data=data) # номера минус проигравшие встречи -1 -16
+            # ============================= ВСТАВИТЬ РАСПИСАНИЕ ====================
+            #========= расписание ===========
+            style_color_schedule = self.schedule_data(data, fin)
+            # ============= данные игроков и встреч и размещение по сетке =============
+            if fin != "Чистая сетка":
+                tds = self.write_in_setka(data, fin, first_mesto, table, posev_data)
+            else:
+                tds = None
+            #===============
+            cw = ((0.2 * cm, 3.8 * cm, 0.35 * cm, 2.7 * cm, 0.35 * cm, 2.7 * cm, 0.35 * cm, 2.7 * cm, 0.35 * cm,
+                2.5 * cm, 0.35 * cm, 3.0 * cm, 0.3 * cm))
+            # основа сетки на чем чертить таблицу (ширина столбцов и рядов, их кол-во)
+            style_color = self.color_mesta(data, first_mesto, table, fin) # раскрашивает места участников красным цветом
+            t = Table(data, cw, strok * [0.36 * cm])
+            # =========  цикл создания стиля таблицы =======
+            # ========= 1 страница =========
+            style = self.draw_setka(1, 3, 32, style) # рисует кусок сетки(номер столбца, номер строки на 32 человека)
+        
+            for l in range(34, 57, 22):
+                fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 1-2 места
+                style.append(fn)
+            for l in range(62, 68, 5):
+                fn = ('LINEABOVE', (11, l), (13, l), 1, colors.darkblue)  # рисует линии встреч за 3-4 места
+                style.append(fn)
+            for l in range(61, 64, 2):
+                fn = ('LINEABOVE', (9, l), (10, l), 1, colors.darkblue)  # рисует линии встреч за -29 -30
+                style.append(fn)
+
+            fn = ('BOX', (10, 61), (10, 62), 1, colors.darkblue)
+            style.append(fn) 
+
+            fn = ('BACKGROUND', (10, 61), (10, 62), colors.lightyellow)  # встречи 32 за 3-4 место
+            style.append(fn)
+        # =========== 2 страница ===================
+            # ======= встречи (33-35) за 5-6 место =====
+            style = self.draw_setka(5, 72, 4, style) # рисует кусок сетки(номер столбца, номер строки на 4 человека)
+            style = self.draw_mesta(row=75, col=9, player=4, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (36) за 7-8 место =====
+            style = self.draw_setka(7, 84, 2, style) # рисует кусок сетки(номер столбца, номер строки на 2 человека)
+            style = self.draw_mesta(row=85, col=9, player=4, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (37-43) за 9-10 место =====
+            style = self.draw_setka(3, 89, 8, style) # рисует кусок сетки(номер столбца, номер строки на 4 человека)
+            style = self.draw_mesta(row=96, col=9, player=8, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (44) за 11-12 место =====
+            style = self.draw_setka(7, 106, 2, style) # рисует кусок сетки(номер столбца, номер строки на 4 человека)
+            style = self.draw_mesta(row=107, col=9, player=2, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (45-47) за 13-14 место =====
+            style = self.draw_setka(5, 114, 4, style) # рисует кусок сетки(номер столбца, номер строки на 4 человека)
+            style = self.draw_mesta(row=117, col=9, player=4, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (48) за 15-16 место =====
+            style = self.draw_setka(7, 126, 2, style) # рисует кусок сетки(номер столбца, номер строки на 4 человека)
+            style = self.draw_mesta(row=127, col=9, player=2, style=style) # рисует линии сетки за места(номер строки, участники)
+        # =========== 3 страница ==================
+            # ======= встречи (49-56) за 17-18 место =====
+            style = self.draw_setka(1, 140, 16, style) # рисует кусок сетки(номер столбца, номер строки на 16человека)
+            style = self.draw_mesta(row=155, col=9, player=16, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (64) за 19-20 место =====
+            style = self.draw_setka(9, 168, 2, style) # рисует кусок сетки(номер столбца, номер строки на 2 человека)
+            style = self.draw_mesta(row=169, col=11, player=2, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (33-35) за 21-24 место =====
+            style = self.draw_setka(5, 172, 4, style) # рисует кусок сетки(номер столбца, номер строки на 4 человека)
+            style = self.draw_mesta(row=175, col=9, player=4, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (68) за 25-26 место =====
+            style = self.draw_setka(9, 182, 2, style) # рисует кусок сетки(номер столбца, номер строки на 2 человека)
+            style = self.draw_mesta(row=183, col=11, player=2, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (69 - 75) за 25-26 место =====
+            style = self.draw_setka(1, 179, 8, style) # рисует кусок сетки(номер столбца, номер строки на 8 человека)
+            style = self.draw_mesta(row=186, col=7, player=8, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (76) за 25-26 место =====
+            style = self.draw_setka(9, 194, 2, style) # рисует кусок сетки(номер столбца, номер строки на 2 человека)
+            style = self.draw_mesta(row=195, col=11, player=2, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (79) за 25-26 место =====
+            style = self.draw_setka(1, 197, 4, style) # рисует кусок сетки(номер столбца, номер строки на 2 человека)
+            style = self.draw_mesta(row=200, col=5, player=4, style=style) # рисует линии сетки за места(номер строки, участники)
+            # ======= встречи (80) за 31-32 место =====
+            style = self.draw_setka(9, 201, 2, style) # рисует кусок сетки(номер столбца, номер строки на 2 человека)
+            style = self.draw_mesta(row=202, col=11, player=2, style=style) # рисует линии сетки за места(номер строки, участники)
+            
+        # =========================================
+            for i in range(0, 11, 2):
+                fn = ('TEXTCOLOR', (i + 1, 0), (i + 1, 206), colors.black)  # цвет шрифта игроков
+                style.append(fn)
+                fn = ('TEXTCOLOR', (i, 0), (i, 206), colors.brown)  # цвет шрифта номеров встреч
+                style.append(fn)
+                # выравнивание фамилий игроков по левому краю
+                fn = ('ALIGN', (i + 1, 0), (i + 1, 206), 'LEFT')
+                style.append(fn)
+                # центрирование номеров встреч
+                fn = ('ALIGN', (i, 0), (i, 206), 'CENTER')
+                style.append(fn)
+                fn = ('VALIGN', (i, 0), (i, 206), 'MIDDLE')
+                style.append(fn)
+            # =========== центрировать счет в партии =========
+            game = self.find_match_numbers_in_table(data, fin)  # находит номер строки и столбца матча на сетке
+            # центрировать счет в партии 
+            num_game = game[0]
+            for i in num_game.keys():
+                row_column = num_game[i]
+                row = row_column[0]
+                column = row_column[1]
+                fn = ('ALIGN', (column + 2, row + 1), (column + 2, row + 1), 'CENTER')
+                style.append(fn)
+        
+            for i in range(0, 12, 2):
+                    fn = ('VALIGN', (i, 0), (i, -1), 'TOP')
+                    style.append(fn)
+            # fn = ('INNERGRID', (0, 0), (-1, -1), 0.01, colors.grey)  # временное отображение сетки
+            # style.append(fn)
+            ts = style   # стиль таблицы (список оформления строк и шрифта)
+            for b in style_color:
+                ts.append(b)
+            for b in style_color_schedule:
+                ts.append(b)
+            t.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                                ('FONTNAME', (0, 0), (-1, -1), "DejaVuSerif"),
+                                ('FONTSIZE', (0, 0), (-1, -1), 5),
+                                ('FONTNAME', (1, 0), (1, 64), "DejaVuSerif-Bold"),
+                                ('FONTSIZE', (1, 0), (1, 64), 5),
+                                ('LEADING', (1, 0), (1, 64), 5), # МЕЖСТРОЧНЫЙ ИНТЕРВАЛ В ЯЧЕЙКЕ (размер 7 = размеру шрифта значит без зазора) 
+                                # цвет шрифта игроков 1 ого тура
+                                ('TEXTCOLOR', (0, 0), (0, 68), colors.blue),
+                                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                                ('VALIGN', (1, 0), (1, 64), 'BOTTOM')] + ts))
+                                
+        # === надпись финала
+            h2 = PS("normal", fontSize=10, fontName="DejaVuSerif-Italic",
+                    leftIndent=50, textColor=Color(1, 0, 1, 1))  # стиль параграфа (номера таблиц)
+            elements.append(Paragraph(f"{fin_title}. Одиночный разряд. {gamer}", h2))
+        # ====
+            elements.append(t)
+            pv = A4
+            znak = final.rfind("-")
+            f = final[:znak]
+
+            if pv == A4:
+                pv = A4
+            else:
+                pv = landscape(A4)
+
+            t_id = Title.get(Title.id == self.current_title_id)
+            if tds is not None:
+                short_name = t_id.short_name_comp
+                if fin == "Одна таблица":
+                    name_table_final = f"{short_name}_{sex}_one_table.pdf"
+                elif fin in pairs_list :
+                    name_table_final = f"{short_name}_{sex}_double_{f}.pdf"
+                elif fin == "Суперфинал":
+                    name_table_final = f"{short_name}_{sex}_{f}.pdf"
+                elif fin != "Суперфинал":
+                    name_table_final = f"{short_name}_{sex}_{f}-final.pdf"                   
+            else:
+                short_name = "clear_32_full_net"  # имя для чистой сетки
+                name_table_final = f"{short_name}.pdf"
+
+            # Создаем PDF
+            filename = os.path.join(pdf_dir, name_table_final)
+
+            doc = SimpleDocTemplate(filename, pagesize=pv, rightMargin=1*cm, leftMargin=1*cm, topMargin=3*cm, bottomMargin=1*cm)
+            doc.build(elements, onFirstPage=self.func_zagolovok, onLaterPages=self.func_zagolovok)
+
+            return name_table_final
+# ===================================
+
     def build_place_matches(self, first_mesto, place_list):
         """
         descending=True  -> меньшее место у большего номера встречи
@@ -23223,7 +23908,7 @@ class MainWindow(QMainWindow):
 
         return name_table_final
 
-    def setka_32_full_made(self, fin, posev_data):
+    def _setka_32_full_made(self, fin, posev_data):
         """сетка на 32 с розыгрышем всех мест"""
         from reportlab.platypus import Table
 
