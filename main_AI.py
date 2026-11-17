@@ -31052,15 +31052,11 @@ class MainWindow(QMainWindow):
         if runner_type == "Урезанный":
             # ====  Одна таблица ====
             if stage in group_list:            
-                # # Фильтруем по номеру группы
-                # if subgroup != "Все группы":
-                #     results = results.where(Result.system_stage == stage)
-                # else:
-                #     results = results.where((Result.system_stage == stage) & (Result.number_group == subgroup))
+
                 if subgroup == "Все группы":
                     results = results.where(Result.system_stage == stage)
-                # else:
-                #     results = results.where((Result.system_stage == stage) & (Result.number_group == subgroup))
+                else:
+                    results = results.where(Result.system_stage == stage).order_by(Result.round)
             elif stage == "Одна таблица":
                  # Фильтруем по номеру группы/финала
                 results = results.where((Result.system_stage == stage) & (Result.number_group == "1 группа"))
@@ -31076,14 +31072,7 @@ class MainWindow(QMainWindow):
                     (Result.player1 != "") &
                     (Result.player2 != "")
                     )
-
-            # # Фильтруем по турам
-            # if tours == "несыгранные":
-            #     results = results.where(
-            #         (Result.winner != "")
-            #         )
-            # elif tours == "диапазон" and list_tours:
-            #     results = results.where(Result.tours.in_(list_tours))
+#================================
 
             results_list = list(results)
             if not results_list:
@@ -31091,6 +31080,51 @@ class MainWindow(QMainWindow):
                                     "Нет не сыгранных встреч,\nв печати бегунков нет необходимости.")
                 return None
 
+            # ─── Сортировка ───
+            # Для квалификации (групповые этапы):
+            #   1) по номеру тура (round) как число;
+            #   2) внутри тура — по номеру группы (из «N группа») как число;
+            #   3) внутри группы — по номеру встречи (tours) как «1-2» (число-число).
+            # Для остальных (полуфиналы/финалы/одна таблица):
+            #   по номеру встречи (tours).
+            import re as _re
+
+            def _extract_group_num(group_str):
+                """'10 группа' → 10; '1 группа' → 1; '' → 0."""
+                if not group_str:
+                    return 0
+                m = _re.search(r'\d+', str(group_str))
+                return int(m.group()) if m else 0
+
+            def _extract_tours_num(tours_str):
+                """'1-2' → (1, 2); '7' → (7, 0)."""
+                if not tours_str:
+                    return (0, 0)
+                m = _re.match(r'(\d+)-(\d+)', str(tours_str))
+                if m:
+                    return (int(m.group(1)), int(m.group(2)))
+                try:
+                    return (int(tours_str), 0)
+                except (ValueError, TypeError):
+                    return (0, 0)
+
+            if stage in group_list:
+                # квалификация: тур → группа → встреча
+                results_list.sort(key=lambda r: (
+                    int(r.round) if r.round and str(r.round).isdigit() else 0,
+                    _extract_group_num(r.number_group),
+                    _extract_tours_num(r.tours),
+                ))
+            elif stage == "Одна таблица":
+                # одна таблица: тур → встреча
+                results_list.sort(key=lambda r: (
+                    int(r.round) if r.round and str(r.round).isdigit() else 0,
+                    _extract_tours_num(r.tours),
+                ))
+            else:
+                # финалы/полуфиналы: только по номеру встречи
+                results_list.sort(key=lambda r: _extract_tours_num(r.tours))
+# =====================================
             # Данные о соревновании
             title = Title.get_by_id(self.current_title_id)
             vozrast = title.vozrast
