@@ -17719,6 +17719,7 @@ class MainWindow(QMainWindow):
         # Находим этап в системе
         stage = System.get_or_none(
             (System.title_id == self.current_title_id) &
+            (System.sex == self.current_sex) &
             (System.stage == stage_name)
         )
         
@@ -18903,7 +18904,11 @@ class MainWindow(QMainWindow):
 
         try:
             # Получаем участников текущего соревнования
-            players = Player.select().where((Player.title_id == self.current_title_id) & (Player.region != ""))
+            players = Player.select().where(
+                (Player.title_id == self.current_title_id) &
+                  (Player.region != "") &
+                  (Player.player != "X")
+                  ) 
             if players.count() == 0:
                 QMessageBox.warning(self, "Ошибка", "Нет участников в соревновании")
                 return
