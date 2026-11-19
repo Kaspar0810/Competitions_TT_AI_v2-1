@@ -7804,6 +7804,7 @@ class MainWindow(QMainWindow):
                 res_id_win = Result.select().where(
                     (Result.title_id == self.current_title_id) & 
                     (Result.sex == self.current_sex) &
+                    (Result.system_id == system.id) &
                     (Result.tours == snoska[0])
                 ).get_or_none()
                 
@@ -7819,6 +7820,7 @@ class MainWindow(QMainWindow):
                     res_id_lose = Result.select().where(
                         (Result.title_id == self.current_title_id) & 
                         (Result.sex == self.current_sex) &
+                        (Result.system_id == system.id) &
                         (Result.tours == snoska[1])
                     ).get_or_none()
                     
@@ -21688,7 +21690,10 @@ class MainWindow(QMainWindow):
             winner_name = winner_name_full[:mark]
             loser_name_full  = fio(p1)
             mark = loser_name_full.find("/")
-            loser_name = loser_name_full[:mark]
+            if mark == -1:
+                loser_name = "X"
+            else:
+                loser_name = loser_name_full[:mark]
             score_str = f"{score} {sets}"
 
         return winner_name, loser_name, score_str
@@ -22294,11 +22299,11 @@ class MainWindow(QMainWindow):
             snoska.append(game_loser)
 
         return snoska
-    
+   # ВАРИАНТ ПОСЛЕД 
     def number_of_game(self, number_game, vid_setki, max_pl, no_game=""):
         """Определяет, куда сносить победителя/проигравшего матча в сетке."""
         snoska = []
-        flag_full = 0
+        flag_full = 0 # ПОЛНАЯ СЕТКА
 
         if vid_setki == 'Олимпийская (с розыгрышем всех мест)':
             if max_pl == 8:
@@ -30185,8 +30190,8 @@ class MainWindow(QMainWindow):
             if stage == "Квалификация. 1-й полуфинал":
                 mesto_first = 1
             else:
-                mesto_first = mesta_exit + 1
-            
+                # mesto_first = mesta_exit + 1
+                 mesto_first = 3
             # Создаем полуфинал
             if stage == "Квалификация. 1-й полуфинал":
                 sf_groups = self.create_semi_final_1(mesto_first, total_group)
@@ -32945,12 +32950,13 @@ class MainWindow(QMainWindow):
                 semi_num = 2
             query = Choice.select().where(
                 (Choice.title_id == self.current_title_id) &
+                (Choice.sex == self.current_sex) &
                 (Choice.semi_final == semi_num)
             )
             group_field = 'sf_group'
             place_field = 'mesto_semi_final'
         else:
-            query = Choice.select().where(Choice.title_id == self.current_title_id)
+            query = Choice.select().where((Choice.title_id == self.current_title_id) & (Choice.sex == self.current_sex))
             group_field = 'group'
             place_field = 'mesto_group'
         

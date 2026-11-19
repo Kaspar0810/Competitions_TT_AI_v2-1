@@ -1700,6 +1700,7 @@ class EditStagesDialog(QDialog):
                         existing_result = Result.get_or_none(
                             (Result.title_id == self.title_id) &
                             (Result.number_group == group_name) &
+                            (Result.sex == self.current_sex) &
                             (Result.tours == match) &
                             (Result.system_stage == system.stage if system.stage in ["Квалификация", "Квалификация. 1-й полуфинал", "Квалификация. 2-й полуфинал"] else None)
                         )
@@ -2053,6 +2054,7 @@ class EditStagesDialog(QDialog):
                 # Находим запись Choice
                 choice = Choice.get_or_none(
                     (Choice.title_id == self.title_id) &
+                    (Choice.sex == self.current_sex) &
                     (Choice.player_choice == player.id)
                 )
                 
