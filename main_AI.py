@@ -32251,7 +32251,7 @@ class MainWindow(QMainWindow):
                     region="",
                     razryad="",
                     title_id=self.current_title_id,
-                    sex="man",
+                    sex=self.current_sex,
                     application="",
                     comment="",
                     pay_rejting="",
@@ -32317,7 +32317,8 @@ class MainWindow(QMainWindow):
                 (Player.player == "X") &
                 (Player.fio == "X") &
                 (Player.fio_city == "X") &
-                (Player.title_id == self.current_title_id))
+                (Player.title_id == self.current_title_id) &
+                (Player.sex == self.current_sex))
             if x_player:
                 return x_player.id
             else:
