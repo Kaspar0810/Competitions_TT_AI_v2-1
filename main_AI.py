@@ -581,7 +581,8 @@ class MainWindow(QMainWindow):
             "Квалификация",
             "Квалификация. 1-й полуфинал",
             "Квалификация. 2-й полуфинал",
-            "Финал"
+            "Финал",
+            "Суперфинал"
         ])
         self.system_stage.setEditable(True)
         self.system_stage.currentTextChanged.connect(self.on_stage_type_changed)
@@ -596,7 +597,7 @@ class MainWindow(QMainWindow):
             "Круговая",
             "Олимпийская (минус 2)",
             "Олимпийская (с розыгрышем всех мест)",
-            "Олимпийская (за 1-3 место)"
+            "Олимпийская (за 1-3 место)"            
         ])
         table_type_layout.addWidget(self.table_type, 1)
         stage_layout.addLayout(table_type_layout)
@@ -22460,6 +22461,8 @@ class MainWindow(QMainWindow):
             snoska.append(game_loser)
 
         return snoska
+
+
 
     def check_olympic_pairs_conflicts(self, stage_name):
         """
