@@ -10506,7 +10506,7 @@ class MainWindow(QMainWindow):
         view_menu.addSeparator()  # разделитель
 
         # Список участников
-        participants_list_action = QAction("📋 Список участников (PDF)", self)
+        participants_list_action = QAction("📋 Список участников", self)
         participants_list_action.triggered.connect(self.export_participants_to_pdf)
         view_menu.addAction(participants_list_action)
 
@@ -10656,6 +10656,13 @@ class MainWindow(QMainWindow):
         act_clear.triggered.connect(self._clear_log)
         log_menu.addAction(act_clear)
 
+        help_menu.addSeparator()
+
+        db_edit_action = QAction("🛠 Редактирование БД", self)
+        db_edit_action.triggered.connect(self.open_db_edit_dialog)
+        help_menu.addAction(db_edit_action)
+
+        
         # Инициализируем обновление меню результатов
         self.update_results_menu()
 
@@ -10868,6 +10875,45 @@ class MainWindow(QMainWindow):
             print(f"Ошибка при сохранении БД: {e}")
             close_db()
             event.accept()
+
+    def open_db_edit_dialog(self):
+        """Открыть окно редактирования таблиц Choice / Game_List / Result."""
+        if not self.current_title_id:
+            QMessageBox.warning(self, "Ошибка",
+                                "Сначала выберите соревнование")
+            return
+
+        # --- Предупреждение о сохранении текущего соревнования ---
+        reply = QMessageBox.question(
+            self, "Перед редактированием БД",
+            "Рекомендуется сохранить текущее соревнование перед правками.\n\n"
+            "Сохранить его сейчас?",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes)
+
+        if reply == QMessageBox.Cancel:
+            return
+        if reply == QMessageBox.Yes:
+            try:
+                self.save_current_competition()
+            except Exception as e:
+                QMessageBox.warning(
+                    self, "Ошибка сохранения",
+                    f"Не удалось сохранить:\n{e}\n\n"
+                    f"Продолжить без сохранения?",
+                )
+                # даже если не сохранилось — продолжаем
+        dlg = DbEditDialog(self, self.current_title_id,
+                        self.current_sex, self.current_title_id)
+        dlg.exec_()
+
+        # после закрытия — обновить открытые вкладки
+        try:
+            self.load_participants_for_title()
+            if getattr(self, 'current_stage', None):
+                self.load_results_table_for_stage(self.current_stage)
+        except Exception:
+            pass
 
     def filter_by_alphabet(self):
         """Сортировка по алфавиту"""
@@ -37815,120 +37861,495 @@ class ChessboardDialog(QDialog):
 
 # def main():
     import traceback
-#     # from PyQt5.QtWidgets import QMessageBox
 
-#     try:
-#         app = QApplication(sys.argv)
+class DbEditDialog(QDialog):
+    """
+    Окно редактирования таблиц Choice / Game_List / Result
+    для текущего соревнования.
 
-#         if not setup_database():
-#             QMessageBox.critical(
-#                 None, "Запуск невозможен",
-#                 "Без настроенной базы данных работа невозможна.\n"
-#                 "Программа будет закрыта.")
-#             sys.exit(1)
+    - Комбобокс выбора таблицы.
+    - Таблица с фильтрами по каждому столбцу и поиском по ФИО.
+    - Редактирование ячеек (кроме id и внешних ключей — они read-only).
+    - Result — пока только просмотр (read-only).
+    """
 
-#         # --- проверка/предложение импорта справочников ---
-#         try:
-#             from models import (db, Region, City, Coach,
-#                                 Patronymic, Players_full)
-#             db.connect(reuse_if_open=True)
+    def __init__(self, parent, title_id, sex, current_title_id=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.title_id = title_id
+        self.sex = sex
 
-#             flags = {
-#                 "Регионы":         Region.select().count() > 0,
-#                 "Города":          City.select().count() > 0,
-#                 "Тренеры":         Coach.select().count() > 0,
-#                 "Отчества":        Patronymic.select().count() > 0,
-#                 "Players_full":    Players_full.select().count() > 0,
-#             }
-#             if not all(flags.values()):
-#                 lines = "\n".join(
-#                     f"  • {k}: {'✔' if v else '— нужно загрузить'}"
-#                     for k, v in flags.items()
-#                 )
-#                 reply = QMessageBox.question(
-#                     None, "Первичная настройка справочников",
-#                     "База данных готова.\n\n"
-#                     f"Состояние справочников:\n{lines}\n\n"
-#                     "Загрузить недостающие справочники сейчас?\n"
-#                     "(можно позже — меню «База данных → "
-#                     "📚 Импорт справочников»)",
-#                     QMessageBox.Yes | QMessageBox.No,
-#                     QMessageBox.Yes)
-#                 if reply == QMessageBox.Yes:
-#                     from import_initial_data import InitialDataImportDialog
-#                     dlg = InitialDataImportDialog()
-#                     dlg.exec_()
-#         except Exception as e:
-#             print(f"Проверка справочников: {e}")
-#             traceback.print_exc()
+        self.setWindowTitle("Редактирование БД")
+        self.setModal(True)
+        self.setMinimumSize(1400, 800)
 
-#         window = MainWindow()
-#         window.show()
-#         sys.exit(app.exec_())
+        self.model = None
+        self.table_name = None
+        self.columns = []           # [(field_name, header, editable, parser)]
+        self.filter_edits = {}      # {col_index: QLineEdit}
+        self._current_rows = []
 
-#     except SystemExit:
-#         raise
-#     except Exception as e:
-#         traceback.print_exc()
-#         try:
-#             QMessageBox.critical(
-#                 None, "Критическая ошибка при запуске",
-#                 f"Программа не смогла запуститься:\n\n"
-#                 f"{type(e).__name__}: {e}\n\n"
-#                 f"Подробный traceback сохранён в stdout.")
-#         except Exception:
-#             pass
-#         sys.exit(2)
+        self._build_ui()
+        self.reload()
 
-# if __name__ == "__main__":
+    # ------------------------------------------------------------------
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
 
-#     import sys
-#     from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QMessageBox
-#     from PyQt5.QtGui import QDesktopServices
-#     from PyQt5.QtCore import QUrl
-#     from log_setup import setup_logging, get_log_file, get_log_dir
+        # --- верхняя панель ---
+        top = QHBoxLayout()
 
-#     app = QApplication(sys.argv)
+        top.addWidget(QLabel("Таблица:"))
+        self.table_combo = QComboBox()
+        self.table_combo.addItem("Choice (жеребьёвка)",
+                                 userData="choice")
+        self.table_combo.addItem("Game_List (игроки в сетке)",
+                                 userData="game_list")
+        self.table_combo.addItem("Result (результаты) — просмотр",
+                                 userData="result")
+        self.table_combo.currentIndexChanged.connect(self.reload)
+        top.addWidget(self.table_combo, 1)
 
-#     # ВАЖНО: org и app задать ДО setup_logging(), иначе QStandardPaths
-#     # вернёт путь по умолчанию и логи окажутся в неожиданном месте
-#     app.setOrganizationName("TT")
-#     app.setApplicationName("TT_Competitions")
+        top.addSpacing(20)
+        top.addWidget(QLabel("Поиск по ФИО:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Введите первые буквы фамилии…")
+        self.search_edit.setMinimumWidth(260)
+        self.search_edit.textChanged.connect(self.apply_filters)
+        top.addWidget(self.search_edit, 1)
 
-#     logger = setup_logging()
-#     logger.info("=== Запуск приложения ===")
+        btn_refresh = QPushButton("🔄 Обновить")
+        btn_refresh.clicked.connect(self.reload)
+        top.addWidget(btn_refresh)
+
+        layout.addLayout(top)
+
+        # --- предупреждение/заметка ---
+        self.hint_label = QLabel("")
+        self.hint_label.setStyleSheet(
+            "color:#b00; background:#fff3e0; padding:6px; "
+            "border-radius:4px;")
+        self.hint_label.setWordWrap(True)
+        self.hint_label.setVisible(False)
+        layout.addWidget(self.hint_label)
+
+        # --- таблица ---
+        self.table_view = QTableView()
+        self.table_view.setSelectionBehavior(QTableView.SelectRows)
+        self.table_view.setAlternatingRowColors(True)
+        self.table_view.setSortingEnabled(True)
+        layout.addWidget(self.table_view, 1)
+
+        # --- строка фильтров (отдельный виджет над таблицей) ---
+        self.filters_widget = QWidget()
+        self.filters_layout = QHBoxLayout(self.filters_widget)
+        self.filters_layout.setContentsMargins(0, 0, 0, 0)
+        self.filters_layout.setSpacing(2)
+        layout.insertWidget(2, self.filters_widget)
+
+        # --- нижняя панель ---
+        bottom = QHBoxLayout()
+
+        self.count_label = QLabel("Показано 0 из 0 записей")
+        self.count_label.setStyleSheet(
+            "font-weight:bold; color:#333; padding:4px;")
+        bottom.addWidget(self.count_label)
+
+        bottom.addStretch()
+
+        self.delete_btn = QPushButton("🗑 Удалить выбранные строки")
+        self.delete_btn.setStyleSheet(
+            "background:#f44336; color:white; padding:6px 14px; "
+            "font-weight:bold;")
+        self.delete_btn.clicked.connect(self.delete_selected)
+        bottom.addWidget(self.delete_btn)
+
+        self.save_btn = QPushButton("💾 Сохранить изменения")
+        self.save_btn.setStyleSheet(
+            "background:#4CAF50; color:white; padding:6px 14px; "
+            "font-weight:bold;")
+        self.save_btn.clicked.connect(self.save_changes)
+        bottom.addWidget(self.save_btn)
+
+        close_btn = QPushButton("Закрыть")
+        close_btn.clicked.connect(self.accept)
+        bottom.addWidget(close_btn)
+
+        layout.addLayout(bottom)
+
+    # ------------------------------------------------------------------
+    def reload(self):
+        """Перечитывает данные из выбранной таблицы."""
+        self.table_name = self.table_combo.currentData()
+        if self.table_name == "choice":
+            self._load_choice()
+        elif self.table_name == "game_list":
+            self._load_game_list()
+        elif self.table_name == "result":
+            self._load_result()
+
+    def _load_choice(self):
+        # Колонки: id, family, group, posev_group, mesto_group,
+        #          semi_final, sf_group, posev_sf, mesto_semi_final,
+        #          final, posev_final, mesto_final, sex, player_choice_id
+        from models import Choice
+
+        rows = list(
+            Choice.select()
+            .where(
+                (Choice.title_id == self.title_id) &
+                (Choice.sex == self.sex))
+            .order_by(Choice.group, Choice.posev_group))
+
+        self.columns = [
+            ("id",             "id",           False, None),
+            ("family",         "Фамилия",      True,  str),
+            ("group",          "Группа",       True,  str),
+            ("posev_group",    "Посев",        True,  int),
+            ("mesto_group",    "Место гр.",    True,  int),
+            ("semi_final",     "ПФ №",         True,  int),
+            ("sf_group",       "Гр. ПФ",       True,  str),
+            ("posev_sf",       "Посев ПФ",     True,  int),
+            ("mesto_semi_final","Место ПФ",    True,  int),
+            ("final",          "Финал",        True,  str),
+            ("posev_final",    "Посев фин.",   True,  int),
+            ("mesto_final",    "Место фин.",   True,  int),
+            ("player_choice_id","player_id",   False, None),
+        ]
+
+        data = [[getattr(r, c[0]) for c in self.columns] for r in rows]
+        self._set_model(data, editable_cols=[
+            i for i, c in enumerate(self.columns) if c[2]])
+
+        self.hint_label.setText(
+            "ℹ После правок в Choice не забудьте проверить таблицу Game_List — "
+            "соответствие игроков и посева в сетке.")
+        self.hint_label.setVisible(True)
+
+        self._after_load()
+
+    def _load_game_list(self):
+        from models import Game_list
+
+        rows = list(
+            Game_list.select()
+            .where(
+                (Game_list.title_id == self.title_id) &
+                (Game_list.sex == self.sex))
+            .order_by(Game_list.number_group, Game_list.rank_num_player))
+
+        self.columns = [
+            ("id",              "id",            False, None),
+            ("number_group",    "Группа/Финал",  True,  str),
+            ("rank_num_player", "Посев",         True,  int),
+            ("player_group_id", "player_id",     False, None),
+            ("player_double_id","pair_id",       False, None),
+            ("system_id",       "system_id",     False, None),
+        ]
+
+        data = []
+        for r in rows:
+            data.append([
+                r.id, r.number_group, r.rank_num_player,
+                r.player_group_id.id if r.player_group_id else None,
+                r.player_double_id.id if r.player_double_id else None,
+                r.system_id.id if r.system_id else None,
+            ])
+
+        self._set_model(data, editable_cols=[
+            i for i, c in enumerate(self.columns) if c[2]])
+
+        self.hint_label.setText(
+            "ℹ Game_List: player_id / pair_id / system_id — read-only. "
+            "Можно править только group / rank_num_player.")
+        self.hint_label.setVisible(True)
+
+        self._after_load()
+
+    def _load_result(self):
+        from models import Result
+
+        rows = list(
+            Result.select()
+            .where(
+                (Result.title_id == self.title_id) &
+                (Result.sex == self.sex))
+            .order_by(Result.system_id, Result.number_group, Result.tours))
+
+        self.columns = [
+            ("id",            "id",          False, None),
+            ("number_group",  "Группа",      False, str),
+            ("tours",         "Тур",         False, str),
+            ("player1",       "Игрок 1",     False, str),
+            ("player2",       "Игрок 2",     False, str),
+            ("winner",        "Победитель",  False, str),
+            ("loser",         "Проигравший", False, str),
+            ("score_in_game", "Счёт",        False, str),
+            ("score_win",     "Партии",      False, str),
+            ("system_id",     "system_id",   False, None),
+        ]
+
+        data = [[getattr(r, c[0]) for c in self.columns] for r in rows]
+        self._set_model(data, editable_cols=[])
+
+        self.hint_label.setText(
+            "ℹ Result — режим «только просмотр». "
+            "Редактирование зарезервировано на будущее.")
+        self.hint_label.setVisible(True)
+
+        self._after_load()
+
+    # ------------------------------------------------------------------
+    def _set_model(self, data, editable_cols):
+        """Устанавливает модель QStandardItemModel с фильтрами."""
+        from PyQt5.QtGui import QStandardItemModel, QStandardItem
+
+        # --- модель ---
+        model = QStandardItemModel()
+        model.setHorizontalHeaderLabels(
+            [c[1] for c in self.columns])
+        for row in data:
+            items = []
+            for v in row:
+                it = QStandardItem("" if v is None else str(v))
+                items.append(it)
+            model.appendRow(items)
+
+        self.model = model
+        self.table_view.setModel(model)
+        self.table_view.resizeColumnsToContents()
+
+        # --- сохраняем исходный набор для фильтрации ---
+        self._all_rows = [list(row) for row in data]
+
+        # --- пересоздать строку фильтров ---
+        while self.filters_layout.count():
+            item = self.filters_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.filter_edits = {}
+        for i, col in enumerate(self.columns):
+            edit = QLineEdit()
+            edit.setPlaceholderText(col[1])
+            edit.setStyleSheet("font-size:10px; padding:2px;")
+            edit.textChanged.connect(self.apply_filters)
+            self.filter_edits[i] = edit
+            self.filters_layout.addWidget(edit)
+
+        self._editable_cols = editable_cols
+
+        # редактирование
+        if editable_cols:
+            self.table_view.setEditTriggers(
+                QAbstractItemView.DoubleClicked
+                | QAbstractItemView.EditKeyPressed)
+        else:
+            self.table_view.setEditTriggers(
+                QAbstractItemView.NoEditTriggers)
+
+        # переустановить модель (показывает актуальные флаги)
+        self.table_view.setModel(model)
+        self.table_view.resizeColumnsToContents()
+
+        # скрыть «технические» колонки? (id / FK) — опционально
+        # self.table_view.setColumnHidden(0, True)
+
+        # соединяем после setModel
+        self._connect_model_signals()
+
+    def _connect_model_signals(self):
+        """Перерисовывает «read-only» колонки серым и вешает tracking изменений."""
+        if self.model is None:
+            return
+        # красим read-only колонки
+        for r in range(self.model.rowCount()):
+            for c in range(self.model.columnCount()):
+                it = self.model.item(r, c)
+                if not it:
+                    continue
+                if c in self._editable_cols:
+                    it.setEditable(True)
+                else:
+                    it.setEditable(False)
+                    it.setBackground(QColor("#F0F0F0"))
+
+    # ------------------------------------------------------------------
+    def apply_filters(self):
+        """Фильтрует _all_rows по всем активным полям."""
+        if not hasattr(self, '_all_rows'):
+            return
+
+        search_text = self.search_edit.text().strip().lower()
+
+        # текст по колонкам
+        col_filters = {}
+        for i, edit in self.filter_edits.items():
+            t = edit.text().strip().lower()
+            if t:
+                col_filters[i] = t
+
+        filtered = []
+        for row in self._all_rows:
+            ok = True
+            # общий поиск по ФИО (по всем строковым колонкам)
+            if search_text:
+                hay = " ".join("" if v is None else str(v)
+                               for v in row).lower()
+                if search_text not in hay:
+                    ok = False
+            if ok:
+                for i, t in col_filters.items():
+                    v = "" if row[i] is None else str(row[i]).lower()
+                    if t not in v:
+                        ok = False
+                        break
+            if ok:
+                filtered.append(row)
+
+        # переписываем модель
+        from PyQt5.QtGui import QStandardItem, QStandardItemModel
+        model = self.model
+        if model is None:
+            return
+
+        model.removeRows(0, model.rowCount())
+        for row in filtered:
+            items = [QStandardItem("" if v is None else str(v))
+                     for v in row]
+            model.appendRow(items)
+
+        self._connect_model_signals()
+
+        # счётчик
+        self.count_label.setText(
+            f"Показано {len(filtered)} из {len(self._all_rows)} записей")
+
+    # ------------------------------------------------------------------
+    def delete_selected(self):
+        idxs = self.table_view.selectionModel().selectedRows()
+        if not idxs:
+            QMessageBox.warning(self, "Удаление",
+                                "Не выбрано ни одной строки")
+            return
+        reply = QMessageBox.question(
+            self, "Удаление",
+            f"Удалить {len(idxs)} строк(и) из таблицы «{self.table_name}»?\n\n"
+            f"Это сразу удалит их из БД.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            with db.atomic():
+                for ix in idxs:
+                    row_idx = ix.row()
+                    id_item = self.model.item(row_idx, 0)
+                    if not id_item:
+                        continue
+                    rec_id = id_item.text()
+                    if not rec_id.isdigit():
+                        continue
+                    self._delete_record_by_id(int(rec_id))
+            QMessageBox.information(self, "Удаление",
+                                    f"Удалено: {len(idxs)}")
+            self.reload()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка удаления", str(e))
+
+    def _delete_record_by_id(self, rec_id):
+        if self.table_name == "choice":
+            from models import Choice
+            Choice.delete().where(Choice.id == rec_id).execute()
+        elif self.table_name == "game_list":
+            from models import Game_list
+            Game_list.delete().where(Game_list.id == rec_id).execute()
+        elif self.table_name == "result":
+            QMessageBox.warning(self, "Result",
+                                "Удаление из Result недоступно (только просмотр).")
+
+    # ------------------------------------------------------------------
+    def save_changes(self):
+        """Собирает изменения из модели и пишет их в БД."""
+        if not self.model:
+            return
+        if not self._editable_cols:
+            QMessageBox.information(
+                self, "Только просмотр",
+                "В этой таблице редактирование не разрешено.")
+            return
+
+        n_updates = 0
+        try:
+            with db.atomic():
+                for r in range(self.model.rowCount()):
+                    id_item = self.model.item(r, 0)
+                    if not id_item:
+                        continue
+                    try:
+                        rec_id = int(id_item.text())
+                    except (ValueError, TypeError):
+                        continue
+
+                    changed = {}
+                    for c in self._editable_cols:
+                        col_field, col_header, _, parser = self.columns[c]
+                        item = self.model.item(r, c)
+                        if not item:
+                            continue
+                        val = item.text().strip()
+                        if val == "":
+                            val = None
+                        else:
+                            if parser:
+                                try:
+                                    val = parser(val)
+                                except Exception:
+                                    raise ValueError(
+                                        f"Колонка «{col_header}» строка {r+1}: "
+                                        f"не удалось преобразовать «{val}»")
+                        changed[col_field] = val
+
+                    if changed:
+                        if self._apply_update(rec_id, changed):
+                            n_updates += 1
+
+            QMessageBox.information(
+                self, "Сохранение",
+                f"Обновлено записей: {n_updates}")
+            self.reload()
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка сохранения",
+                                 f"Изменения не записаны (транзакция откатана).\n\n{e}")
+
+    def _apply_update(self, rec_id, fields):
+        if self.table_name == "choice":
+            from models import Choice
+            q = (Choice.update(**fields)
+                 .where(Choice.id == rec_id))
+            return q.execute() > 0
+        elif self.table_name == "game_list":
+            from models import Game_list
+            q = (Game_list.update(**fields)
+                 .where(Game_list.id == rec_id))
+            return q.execute() > 0
+        elif self.table_name == "result":
+            QMessageBox.warning(self, "Result",
+                                "Редактирование Result зарезервировано.")
+            return False
+        return False
+
+    # ------------------------------------------------------------------
+    def _after_load(self):
+        self.apply_filters()
 
 
-#     try:
-#         window = MainWindow()
-#         window.show()
-#         sys.exit(app.exec_())
-#     except Exception:
-#         logger.critical("Сбой при запуске приложения", exc_info=True)
-#         raise
-
-#     def resource_path(relative_path):
-#         """Возвращает путь к ресурсу, работая и в IDE, и в собранном exe."""
-#         try:
-#             base_path = sys._MEIPASS  # папка, куда PyInstaller распаковывает данные
-#         except AttributeError:
-#             base_path = os.path.abspath(".")
-#         return os.path.join(base_path, relative_path)
-
-
-#     font_path = resource_path(os.path.join("font", "DejaVuSans.ttf"))
-#     pdfmetrics.registerFont(TTFont('DejaVuSans', font_path))
-#     font_path = resource_path(os.path.join("font", "DejaVuSans-Bold.ttf"))
-#     pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', font_path))
-#     font_path = resource_path(os.path.join("font", "DejaVuSerif.ttf"))
-#     pdfmetrics.registerFont(TTFont('DejaVuSerif', font_path))
-#     font_path = resource_path(os.path.join("font", "DejaVuSerif-Bold.ttf"))
-#     pdfmetrics.registerFont(TTFont('DejaVuSerif-Bold', font_path))
-#     font_path = resource_path(os.path.join("font", "DejaVuSerif-Italic.ttf"))
-#     pdfmetrics.registerFont(TTFont('DejaVuSerif-Italic', font_path))
-
-
-#     main()
 def main():
     import traceback
     from PyQt5.QtWidgets import QApplication, QMessageBox
